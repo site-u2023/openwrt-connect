@@ -79,13 +79,14 @@ echo Generating Product.wxs from openwrt-connect.conf...
 
 REM Try PowerShell 7 first (pwsh), then fall back to Windows PowerShell (powershell)
 set "PS_EXE="
-where pwsh >nul 2>&1
+
+pwsh -Command "exit 0" >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     set "PS_EXE=pwsh"
     goto :found_powershell
 )
 
-where powershell >nul 2>&1
+powershell -Command "exit 0" >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     set "PS_EXE=powershell"
     goto :found_powershell
