@@ -132,11 +132,9 @@ foreach ($cmd in $cmds) {
     }
 }
 
-# ARPPRODUCTICON - use first icon found
-$firstIcon = $declaredIcons.Values | Select-Object -First 1
-if ($firstIcon) {
-    W "    <Property Id=`"ARPPRODUCTICON`" Value=`"$firstIcon`" />"
-}
+# ARPPRODUCTICON - use main product icon
+W "    <Icon Id=`"ProductIcon`" SourceFile=`"openwrt-connect.ico`" />"
+W "    <Property Id=`"ARPPRODUCTICON`" Value=`"ProductIcon`" />"
 W ''
 
 # ================================================== #
