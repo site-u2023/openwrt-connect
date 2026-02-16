@@ -1,0 +1,22 @@
+# Build outputs
+*.exe
+*.msi
+*.wixobj
+*.wixpdb
+Product.wxs
+
+# Temporary files
+*.o
+*.obj
+*.res
+*.tmp
+
+# IDE
+.vs/
+.vscode/
+*.suo
+*.user
+
+# OS
+Thumbs.db
+.DS_Store
