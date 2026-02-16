@@ -28,7 +28,7 @@ if exist "C:\mingw64\bin\gcc.exe" (
     goto :found_gcc
 )
 
-where gcc >nul 2>&1
+gcc --version >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     set "GCC=gcc"
     set "WINDRES=windres"
