@@ -77,19 +77,26 @@ REM Generate Product.wxs from config
 REM ----------------------------------------
 echo Generating Product.wxs from openwrt-connect.conf...
 
+REM Try PowerShell 7 first (pwsh), then fall back to Windows PowerShell (powershell)
 set "PS_EXE="
-if exist "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" (
-    set "PS_EXE=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
-)
 where pwsh >nul 2>&1
-if %ERRORLEVEL% EQU 0 if "%PS_EXE%"=="" set "PS_EXE=pwsh"
-
-if "%PS_EXE%"=="" (
-    echo [ERROR] PowerShell not found.
-    pause
-    exit /b 1
+if %ERRORLEVEL% EQU 0 (
+    set "PS_EXE=pwsh"
+    goto :found_powershell
 )
 
+where powershell >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    set "PS_EXE=powershell"
+    goto :found_powershell
+)
+
+echo [ERROR] PowerShell not found.
+echo Please install PowerShell 5.0 or later.
+pause
+exit /b 1
+
+:found_powershell
 "%PS_EXE%" -ExecutionPolicy Bypass -File generate-wxs.ps1
 if %ERRORLEVEL% NEQ 0 ( echo [ERROR] WXS generation failed & pause & exit /b 1 )
 echo.
