@@ -167,4 +167,8 @@ Issue や Pull Request を歓迎します。
 
 ## サポート
 
-- GitHub Issues: [https://github.com/site-u2023/openwrt-connect/issues](https://github.com/site-u2023/openwrt-connect/issues)
+- GitHub: [Issues](https://github.com/site-u2023/openwrt-connect/issues)
+
+## リンク
+
+- Qiita: [OpenWrt SSH 鍵認証 Windows アプリ](https://qiita.com/site_u/items/9111335bcbacde4b9ae5)
