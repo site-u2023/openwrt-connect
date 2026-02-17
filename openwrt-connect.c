@@ -517,13 +517,17 @@ int main(int argc, char *argv[])
 
     /* SSH鍵認証のセットアップ */
     if (ensure_ssh_key(sysroot, key_path, ssh_dir)) {
-        if (test_key_auth(sysroot, key_path, ip, cfg.ssh_user)) {
-            use_key = 1;
-        } else {
-            if (send_public_key(sysroot, pub_path, ip, cfg.ssh_user)) {
-                use_key = 1;
-            }
-        }
+                if (test_key_auth(sysroot, key_path, ip, cfg.ssh_user)) {
+                    use_key = 1;
+                } else {
+                    if (send_public_key(sysroot, pub_path, ip, cfg.ssh_user)) {
+                        use_key = 1;
+                    } else {
+                        system("pause");
+                        return 1;
+                    }
+                }
+            }}
     }
 
     /* SSHコマンドの構築 */
