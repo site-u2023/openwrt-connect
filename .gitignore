@@ -20,3 +20,6 @@ Product.wxs
 # OS
 Thumbs.db
 .DS_Store
+
+# WiX installer EULA (not source code)
+*.rtf
