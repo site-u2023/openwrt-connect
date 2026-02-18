@@ -1,6 +1,6 @@
 # Contributing to OpenWrt Connect
 
-🌐 [English](CONTRIBUTING_en.md) | **日本語**
+🌐 [日本語](README.md) | **English**
 
 ## アーキテクチャ
 
