@@ -12,7 +12,7 @@
 param(
     [string]$ConfFile = "openwrt-connect.conf",
     [string]$OutputFile = "Product.wxs",
-    [string]$LicenseFile = "wix-eula.rtf"
+    [string]$LicenseFile = "license.rtf"
 )
 
 # ================================================== #
