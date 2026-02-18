@@ -1,33 +1,83 @@
 # OpenWrt Connect
 
-Windows から OpenWrt デバイスに簡単に SSH 接続し、カスタムスクリプトを実行できるツール。
+🌐 **日本語** | [English](README_en.md)
+
+## 概要
+
+`Windows`か`OpenWrt`デバイスに簡単`SSH`接続し、カスタムスクリプトを実行できるツール。
+
+- **窓の杜紹介**：[OSに「OpenWrt」を使ったルーターへWindowsから接続「OpenWrt Connect」v1.0.0　ほか](https://forest.watch.impress.co.jp/docs/digest/2086650.html)
 
 ## 特徴
 
-- **自動検出**: ローカルネットワーク内の OpenWrt ルーターを自動検出
-- **鍵認証**: SSH 鍵ペアの自動生成と設定
-- **カスタマイズ**: 設定ファイルで独自コマンドを定義可能
-- **両対応**: Dropbear / OpenSSH 自動判別
-- **汎用設計**: フォーク・カスタマイズを前提とした柔軟な設計
+- **ルーター自動検出**：ローカルネットワーク内のOpenWrtルーターを自動検出
+- **鍵認証自動設定**：SSH鍵ペアを自動で生成・設定
+- **カスタマイズ性**：設定ファイルで独自コマンドを定義可能
+- **SSHパッケージ自動判別**：DropbearとOpenSSHを自動で判別
+- **汎用設計**：フォーク・カスタマイズを前提とした柔軟な設計
+
+## 動作環境
+
+- Windows 10 / 11 (64bit)
+- OpenWrt 21.02+ (Dropbear / OpenSSH 対応)
 
 ## インストール
 
-1. [Releases](https://github.com/site-u2023/openwrt-connect/releases) から `openwrt-connect.msi` をダウンロード
+1. [Releases](https://github.com/site-u2023/openwrt-connect/releases)から`openwrt-connect.msi`をダウンロード
 2. インストーラーを実行
 3. スタートメニューから「OpenWrt Connect」を起動
 
 ## 使い方
 
-### 基本的な SSH 接続
+### 基本的なSSH接続
 
 1. ツールを起動
-2. OpenWrt デバイスの IP アドレスを入力（未入力の場合は自動検出）
-3. 初回のみ root パスワードを入力（SSH 鍵を自動設定）
-4. 次回以降はパスワード不要で接続
+2. 自動検出したOpenWrtデバイスのIPアドレスを確認（変更する場合は手動入力）
+3. 初回のみrootパスワードを入力（パスワード未設定の場合は空エンター）
+4. SSH鍵を自動設定
+5. 次回以降はパスワード不要で接続
+
+### SSH鍵認証の仕組み
+
+**Windows側**
+
+鍵の生成
+```cmd
+ssh-keygen -t rsa -f "%USERPROFILE%\.ssh\owrt-connect_<IP>_rsa"
+```
+
+生成される鍵ファイル
+```PowerShell
+%USERPROFILE%\.ssh\owrt-connect__rsa
+%USERPROFILE%\.ssh\owrt-connect__rsa.pub
+```
+
+鍵の転送
+```cmd
+type "%USERPROFILE%\.ssh\owrt-connect_<IP>_rsa.pub" | ssh root@<IP> "cat >> /etc/dropbear/authorized_keys"
+```
+
+**OpenWrt側**
+
+配置される鍵ファイル
+```sh
+# Dropbear
+/etc/dropbear/authorized_keys
+# OpenSSH
+/root/.ssh/authorized_keys
+```
+
+### IPアドレス自動検出の仕組み
+
+Windowsルーティングテーブルからデフォルトゲートウェイを取得
+```cmd
+route print 0.0.0.0
+```
+> フォールバック：`192.168.1.1`
 
 ### カスタムコマンドの追加
 
-`openwrt-connect.conf` を編集して、独自のコマンドを定義できます。
+`openwrt-connect.conf`を編集して、独自のコマンドを定義可能。
 
 #### 例: カスタムスクリプトの実行
 
@@ -41,12 +91,13 @@ bin = /usr/bin/mysetup
 ```
 
 この設定により：
-1. `openwrt-connect.exe mysetup` で実行
-2. OpenWrt デバイスが `https://example.com/my-script.sh` をダウンロード
-3. `/tmp/mysetup` に展開して実行
-4. スクリプトを `/usr/bin/mysetup` に永続化
 
-#### 例: SSH のみ（インタラクティブモード）
+1. `openwrt-connect.exe mysetup`で実行
+2. OpenWrtデバイスが`https://example.com/my-script.sh`をダウンロード
+3. `/tmp/mysetup`に展開して実行
+4. スクリプトを`/usr/bin/mysetup`に永続化
+
+#### 例: SSHのみ（インタラクティブモード）
 
 ```ini
 [command.terminal]
@@ -54,7 +105,7 @@ label = Terminal
 icon = terminal.ico
 ```
 
-`url` が未指定の場合、対話型 SSH セッションを開きます。
+`url`が未指定の場合、対話型SSHセッションを開きます。
 
 ## 設定ファイル
 
@@ -62,7 +113,7 @@ icon = terminal.ico
 
 | セクション | 説明 |
 |---|---|
-| `[general]` | 製品名、デフォルト IP、SSH ユーザー、鍵プレフィックス |
+| `[general]` | アプリ名、デフォルトIP、SSHユーザー、鍵プレフィックス |
 | `[command.<名前>]` | コマンド定義（複数定義可能） |
 
 ### コマンド定義のフィールド
@@ -71,79 +122,16 @@ icon = terminal.ico
 |---|---|---|
 | `label` | 表示名 | ○ |
 | `icon` | アイコンファイル名 | |
-| `url` | リモートスクリプト URL | |
+| `url` | リモートスクリプトURL | |
 | `dir` | デバイス上の一時ディレクトリ | |
 | `bin` | デバイス上の永続化パス | |
-
-## アーキテクチャ
-
-```
-openwrt-connect.exe         openwrt-connect.conf
-(汎用コア)                   (固有設定)
-┌─────────────────┐         ┌──────────────────┐
-│ ゲートウェイ検出 │  ←────  │ [general]        │
-│ SSH鍵認証       │         │ [command.xxx]    │
-│ 設定ファイル解析 │         │ [command.yyy]    │
-│ スクリプト実行   │         └──────────────────┘
-└─────────────────┘
-```
-
-## ビルド方法
-
-### 必要ツール
-
-- MinGW-w64
-- WiX Toolset v3.11
-- PowerShell 5.0+
-
-### 手順
-
-```bat
-openwrt-connect-build.bat
-```
-
-これにより以下が生成されます：
-- `openwrt-connect.exe` - 実行ファイル
-- `openwrt-connect.msi` - インストーラー
-
-## フォーク・カスタマイズ
-
-このツールは、独自のスクリプトランチャーとして自由にカスタマイズできます。
-
-### カスタマイズ例
-
-1. `openwrt-connect.conf` の `[general]` セクションを変更
-
-```ini
-[general]
-product_name = My Router Tool
-```
-
-2. 独自のコマンドを追加
-
-```ini
-[command.mycommand]
-label = My Command
-icon = mycommand.ico
-url = https://myserver.com/script.sh
-dir = /tmp/mycommand
-bin = /usr/bin/mycommand
-```
-
-3. ビルド
-
-```bat
-openwrt-connect-build.bat
-```
-
-独自のアイコン (`.ico`) を配置すれば、インストーラーに自動的に含まれます。
 
 ## セキュリティ
 
 ### このツールが行うこと
 
-- ローカルネットワーク内の OpenWrt デバイスを検出（ARP テーブル参照）
-- SSH 鍵ペアの生成（ユーザーの `.ssh` フォルダ内）
+- ローカルネットワーク内のOpenWrtデバイスを検出（ルーティングテーブル参照）
+- SSH鍵ペアの生成（ユーザーの`.ssh`フォルダ内）
 - 公開鍵をデバイスに送信（初回のみパスワード認証経由）
 - 以降、鍵認証でコマンド実行
 
@@ -151,24 +139,23 @@ openwrt-connect-build.bat
 
 - インターネット経由での情報送信
 - ユーザーデータの収集
-- 外部サーバーへの通信（EXE 自体は通信しません）
+- 外部サーバーへの通信（EXE自体は通信しません）
 
 ### スクリプト実行について
 
-`url` フィールドで指定したスクリプトは、**OpenWrt デバイス側**が `wget` でダウンロードして実行します。EXE 自体は外部通信を行いません。
+`url`フィールドで指定したスクリプトは、**OpenWrtデバイス側**が`wget`でダウンロードして実行します。EXE自体は外部通信を行いません。
 
 ## ライセンス
 
 MIT License
 
-## 貢献
-
-Issue や Pull Request を歓迎します。
-
 ## サポート
 
-- GitHub: [Issues](https://github.com/site-u2023/openwrt-connect/issues)
+IssueやPull Requestを歓迎します。
+
+- [Issues](https://github.com/site-u2023/openwrt-connect/issues)
 
 ## リンク
 
-- Qiita: [OpenWrt SSH 鍵認証 Windows アプリ](https://qiita.com/site_u/items/9111335bcbacde4b9ae5)
+- [Contributing](CONTRIBUTING.md)
+- [OpenWrt SSH 鍵認証 Windows アプリ](https://qiita.com/site_u/items/9111335bcbacde4b9ae5)
