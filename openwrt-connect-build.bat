@@ -60,7 +60,7 @@ echo.
 REM ----------------------------------------
 REM Build MSI (optional)
 REM ----------------------------------------
-set WIXPATH=C:\Program Files (x86)\WiX Toolset v3.14\bin
+for /d %%i in ("C:\Program Files (x86)\WiX Toolset v3*") do set WIXPATH=%%i\bin
 
 if not exist "%WIXPATH%\candle.exe" (
     echo [SKIP] WiX Toolset not found - skipping MSI build
