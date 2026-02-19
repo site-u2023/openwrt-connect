@@ -13,13 +13,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\ProgramData\chocolatey
-          key: choco-mingw-wix-${{ runner.os }}
+          key: choco-mingw-${{ runner.os }}
 
       - name: Install MinGW-w64
         run: choco install mingw --yes
 
       - name: Install WiX Toolset
-        run: choco install wixtoolset --yes --allow-downgrade
+        run: if (-not (Test-Path "C:\Program Files (x86)\WiX Toolset v3*")) { choco install wixtoolset --yes }
+        shell: pwsh
 
       - name: Build
         shell: cmd
