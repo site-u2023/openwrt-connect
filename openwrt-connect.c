@@ -247,10 +247,11 @@ int send_public_key(const char *sysroot, const char *pub_path, const char *ip, c
         SSH_OPTS
         " %s@%s"
         " \""
+        "[ -f /etc/openwrt_release ] || { echo 'ERROR: Not an OpenWrt device. Aborting.'; exit 1; };"
         "cat > /tmp/.pubkey_tmp;"
-        "[ -d /etc/dropbear ] && cat /tmp/.pubkey_tmp >> /etc/dropbear/authorized_keys && chmod 600 /etc/dropbear/authorized_keys;"
-        "[ -d /root/.ssh ] && cat /tmp/.pubkey_tmp >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys;"
-        "rm -f /tmp/.pubkey_tmp"
+        "  [ -d /etc/dropbear ] && cat /tmp/.pubkey_tmp >> /etc/dropbear/authorized_keys && chmod 600 /etc/dropbear/authorized_keys;"
+        "  [ -d /root/.ssh ]    && cat /tmp/.pubkey_tmp >> /root/.ssh/authorized_keys    && chmod 600 /root/.ssh/authorized_keys;"
+        "  rm -f /tmp/.pubkey_tmp"
         "\"",
         pub_path, sysroot, user, ip);
 
