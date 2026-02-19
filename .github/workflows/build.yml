@@ -9,19 +9,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache Chocolatey packages
-        uses: actions/cache@v4
-        with:
-          path: C:\ProgramData\chocolatey
-          key: choco-mingw-${{ runner.os }}
-
-      - name: Install MinGW-w64
-        run: choco install mingw --yes
-
-      - name: Install WiX Toolset
-        run: if (-not (Test-Path "C:\Program Files (x86)\WiX Toolset v3*")) { choco install wixtoolset --yes }
-        shell: pwsh
-
       - name: Build
         shell: cmd
         run: openwrt-connect-build.bat
