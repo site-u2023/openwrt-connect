@@ -37,6 +37,14 @@ A launcher tool for `SSH` connection to `OpenWrt` devices and script execution f
 4. SSH key is configured automatically
 5. Password-free connection from the next time onwards
 
+### How IP Address Auto-detection Works
+
+Retrieves the default gateway from the Windows routing table
+```cmd
+route print 0.0.0.0
+```
+> Fallback: `192.168.1.1`
+
 ### How SSH Key Authentication Works
 
 **Windows side**
@@ -56,6 +64,7 @@ Key transfer
 ```cmd
 type "%USERPROFILE%\.ssh\owrt-connect_<IP>_rsa.pub" | ssh root@<IP> "cat >> /etc/dropbear/authorized_keys"
 ```
+> Completes public key transfer and SSH connection in a single command
 
 **OpenWrt side**
 
@@ -66,14 +75,6 @@ Deployed key files
 # OpenSSH
 /root/.ssh/authorized_keys
 ```
-
-### How IP Address Auto-detection Works
-
-Retrieves the default gateway from the Windows routing table
-```cmd
-route print 0.0.0.0
-```
-> Fallback: `192.168.1.1`
 
 ### Adding Custom Commands
 
