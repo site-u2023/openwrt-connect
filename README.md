@@ -37,6 +37,14 @@
 4. SSH鍵を自動設定
 5. 次回以降はパスワード不要で接続
 
+### IPアドレス自動検出の仕組み
+
+Windowsルーティングテーブルからデフォルトゲートウェイを取得
+```cmd
+route print 0.0.0.0
+```
+> フォールバック：`192.168.1.1`
+
 ### SSH鍵認証の仕組み
 
 **Windows側**
@@ -56,6 +64,7 @@ ssh-keygen -t rsa -f "%USERPROFILE%\.ssh\owrt-connect_<IP>_rsa"
 ```cmd
 type "%USERPROFILE%\.ssh\owrt-connect_<IP>_rsa.pub" | ssh root@<IP> "cat >> /etc/dropbear/authorized_keys"
 ```
+> 公開鍵の転送とSSH接続を1コマンドで完結
 
 **OpenWrt側**
 
@@ -67,17 +76,9 @@ type "%USERPROFILE%\.ssh\owrt-connect_<IP>_rsa.pub" | ssh root@<IP> "cat >> /etc
 /root/.ssh/authorized_keys
 ```
 
-### IPアドレス自動検出の仕組み
-
-Windowsルーティングテーブルからデフォルトゲートウェイを取得
-```cmd
-route print 0.0.0.0
-```
-> フォールバック：`192.168.1.1`
-
 ### カスタムコマンドの追加
 
-`openwrt-connect.conf`を編集して、独自のコマンドを定義可能。
+`openwrt-connect.conf`を編集して、独自のコマンドを定義可能
 
 #### 例: カスタムスクリプトの実行
 
