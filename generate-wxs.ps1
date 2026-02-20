@@ -10,10 +10,21 @@
     Called by build.bat before WiX compilation.
 #>
 param(
-    [string]$ConfFile = "openwrt-connect.conf",
-    [string]$OutputFile = "Product.wxs",
+    [string]$ConfFile    = "",
+    [string]$OutputFile  = "Product.wxs",
     [string]$LicenseFile = "wix-eula.rtf"
 )
+
+# .conf自動検出: 未指定の場合はカレントディレクトリの最初の.confを使用
+if ($ConfFile -eq "") {
+    $found = Get-ChildItem -Path "." -Filter "*.conf" | Select-Object -First 1
+    if ($null -eq $found) {
+        Write-Error "No .conf file found in current directory."
+        exit 1
+    }
+    $ConfFile = $found.FullName
+    Write-Host "Auto-detected conf: $ConfFile"
+}
 
 # ================================================== #
 # Parse openwrt-connect.conf                                   #
