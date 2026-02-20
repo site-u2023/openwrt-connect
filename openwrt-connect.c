@@ -35,7 +35,21 @@
 #define MAX_VALUE_LEN       512
 #define MAX_LINE_LEN        1024
 #define MAX_CMD_BUF         8192
-#define CONF_FILENAME       "openwrt-connect.conf"
+/* .conf自動検出: exeと同ディレクトリの最初の.confファイルを使用 */
+static int find_conf_file(const char *exe_dir, char *conf_path, size_t size)
+{
+    WIN32_FIND_DATAA fd;
+    HANDLE hFind;
+    char pattern[MAX_VALUE_LEN];
+
+    snprintf(pattern, sizeof(pattern), "%s*.conf", exe_dir);
+    hFind = FindFirstFileA(pattern, &fd);
+    if (hFind == INVALID_HANDLE_VALUE) return 0;
+
+    snprintf(conf_path, size, "%s%s", exe_dir, fd.cFileName);
+    FindClose(hFind);
+    return 1;
+}
 
 #define SSH_OPTS \
     " -o StrictHostKeyChecking=no" \
@@ -276,8 +290,12 @@ int load_config(const char *exe_path, Config *cfg)
     strcpy(cfg->ssh_key_prefix, "owrt-connect");
     cfg->command_count = 0;
 
-    /* .confのパスを構築 (EXEと同じディレクトリ) */
-    snprintf(conf_path, sizeof(conf_path), "%s%s", exe_path, CONF_FILENAME);
+    /* .confのパスを構築 (EXEと同じディレクトリの.confを自動検出) */
+    if (!find_conf_file(exe_path, conf_path, sizeof(conf_path))) {
+        printf("[WARN] No .conf file found in: %s\n", exe_path);
+        printf("[WARN] Using built-in defaults.\n\n");
+        return 0;
+    }
 
     fp = fopen(conf_path, "r");
     if (!fp) {
