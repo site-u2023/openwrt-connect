@@ -42,7 +42,8 @@ openwrt-connect-build.bat
 
 このツールは、独自のスクリプトランチャーとして自由にカスタマイズできます。
 
-1. `openwrt-connect.conf`の`[general]`セクションでアプリ名を変更
+1. `.conf`ファイルの`[general]`セクションでアプリ名を変更
+> `.conf`ファイル名は自由です（例：`myrouter.conf`）。EXEは同じディレクトリの最初の`.conf`を自動検出します。
 
 ```ini
 [general]
