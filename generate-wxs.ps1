@@ -26,6 +26,8 @@ if ($ConfFile -eq "") {
     Write-Host "Auto-detected conf: $ConfFile"
 }
 
+$confFileName = [System.IO.Path]::GetFileName($ConfFile)
+
 # ================================================== #
 # Parse openwrt-connect.conf                                   #
 # ================================================== #
@@ -186,13 +188,14 @@ W ''
 # ================================================== #
 # Main executable + conf                             #
 # ================================================== #
+$confFileId = Sanitize-Id ([System.IO.Path]::GetFileNameWithoutExtension($confFileName) + "_conf")
 W '    <!-- Main files -->'
 W '    <DirectoryRef Id="INSTALLFOLDER">'
 W "      <Component Id=`"ExeComponent`" Guid=`"C91DF506-205E-4C86-958F-3A4702ED257D`">"
 W '        <File Id="openwrt_connect.exe" Source="openwrt-connect.exe" KeyPath="yes" />'
 W '      </Component>'
 W "      <Component Id=`"ConfComponent`" Guid=`"E7A3B1D4-5F28-4C9A-A6E1-8D0F2B7C3E95`">"
-W '        <File Id="openwrt_connect.conf" Source="openwrt-connect.conf" KeyPath="yes" />'
+W "        <File Id=`"$confFileId`" Source=`"$confFileName`" KeyPath=`"yes`" />"
 W '      </Component>'
 W '    </DirectoryRef>'
 W ''
