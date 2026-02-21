@@ -12,9 +12,9 @@ A launcher tool for `SSH` connection to `OpenWrt` devices and script execution f
 
 - **Router Auto-detection**: Automatically detects OpenWrt routers on the local network
 - **SSH Key Auto-setup**: Automatically generates and configures SSH key pairs
-- **Customizable**: Define custom commands via configuration file
+- **Flexible Commands**: Supports script (inline/external file), url, and cmd execution modes
 - **SSH Package Auto-detection**: Automatically detects Dropbear or OpenSSH
-- **Generic Design**: Flexible design for forking and customization
+- **Clean Separation**: Build settings (.ini) and runtime config (.conf) are separate files
 
 ## Requirements
 
@@ -51,18 +51,18 @@ route print 0.0.0.0
 
 Key generation
 ```cmd
-ssh-keygen -t rsa -f "%USERPROFILE%\.ssh\owrt-connect_<IP>_rsa"
+ssh-keygen -t rsa -f "%USERPROFILE%\.ssh\openwrt-connect_<IP>_rsa"
 ```
 
 Generated key files
 ```PowerShell
-%USERPROFILE%\.ssh\owrt-connect_<IP>_rsa
-%USERPROFILE%\.ssh\owrt-connect_<IP>_rsa.pub
+%USERPROFILE%\.ssh\openwrt-connect_<IP>_rsa
+%USERPROFILE%\.ssh\openwrt-connect_<IP>_rsa.pub
 ```
 
 Key transfer
 ```cmd
-type "%USERPROFILE%\.ssh\owrt-connect_<IP>_rsa.pub" | ssh root@<IP> "cat >> /etc/dropbear/authorized_keys"
+type "%USERPROFILE%\.ssh\openwrt-connect_<IP>_rsa.pub" | ssh root@<IP> "cat >> /etc/dropbear/authorized_keys"
 ```
 > Completes public key transfer and SSH connection in a single command
 
@@ -76,56 +76,90 @@ Deployed key files
 /root/.ssh/authorized_keys
 ```
 
-### Adding Custom Commands
+### Command Definitions
 
-Edit `openwrt-connect.conf` to define custom commands.
+Three execution modes can be defined in the `.conf` file.
 
-#### Example: Running a custom script
+#### script - Shell Script Execution
+
+**Inline (multi-line):**
+```ini
+[command.setup]
+script =
+  #!/bin/sh
+  opkg update
+  opkg install luci-i18n-base-ja
+```
+
+**External file reference (same directory as EXE):**
+```ini
+[command.adguard]
+script = ./adguardhome.sh
+```
+
+#### url - Remote Script Execution
 
 ```ini
 [command.mysetup]
-label = My Custom Setup
-icon = mysetup.ico
 url = https://example.com/my-script.sh
-dir = /tmp/mysetup
-bin = /usr/bin/mysetup
 ```
 
-This configuration:
-
-1. Runs with `openwrt-connect.exe mysetup`
-2. OpenWrt device downloads `https://example.com/my-script.sh`
-3. Extracts and runs in `/tmp/mysetup`
-4. Persists script to `/usr/bin/mysetup`
-
-#### Example: SSH only (interactive mode)
+#### cmd - Single Command Execution
 
 ```ini
-[command.terminal]
-label = Terminal
-icon = terminal.ico
+[command.update]
+cmd = opkg update && opkg upgrade luci
 ```
 
-If `url` is not specified, opens an interactive SSH session.
+#### SSH Only
+
+```ini
+[command.ssh]
+```
+
+No fields = interactive SSH session.
 
 ## Configuration
 
-### openwrt-connect.conf
+### Changes in v2.0.0
+
+Build settings and runtime config are now separate files:
+
+| File | Purpose | Read by |
+|---|---|---|
+| `*.ini` | Build settings (shortcuts, icons) | generate-wxs.ps1 |
+| `*.conf` | Runtime config (SSH, commands) | openwrt-connect.exe |
+
+### .ini (Build Settings)
 
 | Section | Description |
 |---|---|
-| `[general]` | App name, default IP, SSH user, key prefix |
-| `[command.<name>]` | Command definition (multiple allowed) |
+| `[general]` | Product name |
+| `[command.<name>]` | Shortcut definition (label, icon) |
+
+### .conf (Runtime Config)
+
+| Section | Description |
+|---|---|
+| `[general]` | Default IP, SSH user, key prefix |
+| `[command.<name>]` | Command definition (script, url, cmd) |
 
 ### Command Definition Fields
+
+**Build settings (.ini):**
 
 | Field | Description | Required |
 |---|---|---|
 | `label` | Display name | ○ |
 | `icon` | Icon filename | |
-| `url` | Remote script URL | |
-| `dir` | Temp directory on device | |
-| `bin` | Persistent path on device | |
+
+**Runtime config (.conf):**
+
+| Field | Description | Priority |
+|---|---|---|
+| `script` | Shell script (inline or `./file.sh`) | 1 |
+| `url` | Remote script URL | 2 |
+| `cmd` | Single command | 3 |
 
 ## Security
 
