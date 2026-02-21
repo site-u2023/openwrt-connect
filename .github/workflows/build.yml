@@ -6,6 +6,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -13,10 +15,7 @@ jobs:
         shell: cmd
         run: openwrt-connect-build.bat
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: openwrt-connect
-          path: |
-            openwrt-connect.exe
-            openwrt-connect.msi
+      - name: Upload to release
+        run: gh release upload v1.0.0 openwrt-connect.msi --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
