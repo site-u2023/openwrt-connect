@@ -463,7 +463,7 @@ int main(int argc, char *argv[])
     if (arg && strcmp(arg, "--help") == 0) {
         printf("Usage: openwrt-connect.exe [command|--list|--help]\n\n");
         printf("  (no args)    Interactive SSH connection\n");
-        printf("  <command>    Execute command defined in %s\n", CONF_FILENAME);
+        printf("  <command>    Execute command defined in .conf\n");
         printf("  --list       List available commands\n");
         printf("  --help       Show this help\n");
         return 0;
