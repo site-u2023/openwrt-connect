@@ -1,44 +1,54 @@
 <#
 .SYNOPSIS
-    Generate Product.wxs from openwrt-connect.conf
+    Generate Product.wxs from .ini file
 
 .DESCRIPTION
-    Reads command definitions from openwrt-connect.conf and generates
+    Reads build settings from .ini file and generates
     a WiX installer definition with matching features and shortcuts.
+    
+    v2.0.0: Changed from .conf to .ini (build settings separated from runtime config)
 
 .NOTES
     Called by build.bat before WiX compilation.
 #>
 param(
-    [string]$ConfFile    = "",
+    [string]$IniFile     = "",
     [string]$OutputFile  = "Product.wxs",
     [string]$LicenseFile = "wix-eula.rtf"
 )
 
-# .conf自動検出: 未指定の場合はカレントディレクトリの最初の.confを使用
-if ($ConfFile -eq "") {
-    $found = Get-ChildItem -Path "." -Filter "*.conf" | Select-Object -First 1
+# .ini自動検出: 未指定の場合はカレントディレクトリの最初の.iniを使用
+if ($IniFile -eq "") {
+    $found = Get-ChildItem -Path "." -Filter "*.ini" | Select-Object -First 1
     if ($null -eq $found) {
-        Write-Error "No .conf file found in current directory."
+        Write-Error "No .ini file found in current directory."
         exit 1
     }
-    $ConfFile = $found.FullName
-    Write-Host "Auto-detected conf: $ConfFile"
+    $IniFile = $found.FullName
+    Write-Host "Auto-detected ini: $IniFile"
 }
 
-$confFileName = [System.IO.Path]::GetFileName($ConfFile)
+$iniFileName = [System.IO.Path]::GetFileName($IniFile)
 
 # ================================================== #
-# Parse openwrt-connect.conf                                   #
+# Also detect .conf file for bundling into MSI       #
 # ================================================== #
-function Parse-Conf {
+$confFile = Get-ChildItem -Path "." -Filter "*.conf" | Select-Object -First 1
+if ($null -eq $confFile) {
+    Write-Error "No .conf file found in current directory (required for MSI bundling)."
+    exit 1
+}
+$confFileName = $confFile.Name
+Write-Host "Auto-detected conf: $confFileName"
+
+# ================================================== #
+# Parse .ini file                                    #
+# ================================================== #
+function Parse-Ini {
     param([string]$Path)
 
     $general = @{
         product_name   = "OpenWrt Connect"
-        default_ip     = "192.168.1.1"
-        ssh_user       = "root"
-        ssh_key_prefix = "owrt-connect"
     }
     $commands = [System.Collections.ArrayList]::new()
     $currentSection = ""
@@ -57,9 +67,6 @@ function Parse-Conf {
                     name  = $cmdName
                     label = ""
                     icon  = ""
-                    url   = ""
-                    dir   = ""
-                    bin   = ""
                 }
                 [void]$commands.Add($currentCmd)
             } else {
@@ -107,9 +114,9 @@ function Get-DeterministicGuid {
 # WiX ID sanitizer: hyphens to underscores
 function Sanitize-Id { param([string]$s) return $s -replace '-', '_' }
 
-$conf = Parse-Conf -Path $ConfFile
-$gen = $conf.General
-$cmds = $conf.Commands
+$ini = Parse-Ini -Path $IniFile
+$gen = $ini.General
+$cmds = $ini.Commands
 
 $xml = [System.Text.StringBuilder]::new()
 
@@ -121,7 +128,7 @@ W "  <Product Id=`"*`""
 W "           Name=`"$($gen.product_name)`""
 W '           Language="1041"'
 W '           Codepage="65001"'
-W '           Version="1.1.0.0"'
+W '           Version="2.0.0.0"'
 W '           Manufacturer="siteU"'
 W '           UpgradeCode="9B606AC5-8CEF-47B9-B7D6-79787CADFFA5">'
 W ''
@@ -188,12 +195,12 @@ W ''
 # ================================================== #
 # Main executable + conf                             #
 # ================================================== #
-$confFileId = Sanitize-Id ([System.IO.Path]::GetFileNameWithoutExtension($confFileName) + "_conf")
 W '    <!-- Main files -->'
 W '    <DirectoryRef Id="INSTALLFOLDER">'
 W "      <Component Id=`"ExeComponent`" Guid=`"C91DF506-205E-4C86-958F-3A4702ED257D`">"
 W '        <File Id="openwrt_connect.exe" Source="openwrt-connect.exe" KeyPath="yes" />'
 W '      </Component>'
+$confFileId = Sanitize-Id ([System.IO.Path]::GetFileNameWithoutExtension($confFileName) + "_conf")
 W "      <Component Id=`"ConfComponent`" Guid=`"E7A3B1D4-5F28-4C9A-A6E1-8D0F2B7C3E95`">"
 W "        <File Id=`"$confFileId`" Source=`"$confFileName`" KeyPath=`"yes`" />"
 W '      </Component>'
@@ -209,11 +216,10 @@ W '    <DirectoryRef Id="ApplicationProgramsFolder">'
 $isFirstStartMenu = $true
 foreach ($cmd in $cmds) {
     $compId = "Shortcut_$($cmd.name)_StartMenu"
-    $guid = Get-DeterministicGuid -Seed "startmenu_$($cmd.name)_v1"
+    $guid = Get-DeterministicGuid -Seed "startmenu_$($cmd.name)_v2"
     $scId = "StartMenu_$($cmd.name)"
     $desc = if ($cmd.label -ne "") { $cmd.label } else { $cmd.name }
-    $hasUrl = ($cmd.url -ne "")
-    $args = if ($hasUrl) { $cmd.name } elseif ($cmd.name -ne "ssh") { $cmd.name } else { "ssh" }
+    $args = if ($cmd.name -ne "ssh") { $cmd.name } else { "ssh" }
     $iconRef = if ($declaredIcons.ContainsKey($cmd.icon)) { $declaredIcons[$cmd.icon] } else { $null }
 
     W "      <Component Id=`"$compId`" Guid=`"$guid`">"
@@ -254,11 +260,10 @@ W '    <DirectoryRef Id="DesktopFolder">'
 
 foreach ($cmd in $cmds) {
     $compId = "Shortcut_$($cmd.name)_Desktop"
-    $guid = Get-DeterministicGuid -Seed "desktop_$($cmd.name)_v1"
+    $guid = Get-DeterministicGuid -Seed "desktop_$($cmd.name)_v2"
     $scId = "Desktop_$($cmd.name)"
     $desc = if ($cmd.label -ne "") { $cmd.label } else { $cmd.name }
-    $hasUrl = ($cmd.url -ne "")
-    $args = if ($hasUrl) { $cmd.name } elseif ($cmd.name -ne "ssh") { $cmd.name } else { "ssh" }
+    $args = if ($cmd.name -ne "ssh") { $cmd.name } else { "ssh" }
     $iconRef = if ($declaredIcons.ContainsKey($cmd.icon)) { $declaredIcons[$cmd.icon] } else { $null }
 
     W "      <Component Id=`"$compId`" Guid=`"$guid`">"
@@ -301,8 +306,8 @@ W '</Wix>'
 # ================================================== #
 $xml.ToString() | Out-File -FilePath $OutputFile -Encoding UTF8
 Write-Host "Generated: $OutputFile"
+Write-Host "  Source: $iniFileName (build settings) + $confFileName (runtime config)"
 Write-Host "  Commands: $($cmds.Count)"
 foreach ($cmd in $cmds) {
-    $type = if ($cmd.url -ne "") { "remote" } else { "ssh-only" }
-    Write-Host "    $($cmd.name) ($type)"
+    Write-Host "    $($cmd.name) - $($cmd.label)"
 }
