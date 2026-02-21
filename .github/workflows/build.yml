@@ -13,7 +13,8 @@ jobs:
         shell: cmd
         run: openwrt-connect-build.bat
 
-      - name: Upload to release
-        run: gh release upload v2.0.0 openwrt-connect.msi --clobber
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-connect
+          path: openwrt-connect.msi
