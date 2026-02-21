@@ -5,19 +5,19 @@
 ## アーキテクチャ
 
 ```
-openwrt-connect.exe              openwrt-connect.conf
-(汎用コア)                        (固有設定)
-┌─────────────────────┐          ┌──────────────────────────┐
-│ ■ IPv4ゲートウェイ   │          │ [general]                │
-│   自動検出           │          │ product_name, default_ip │
-│ ■ SSH鍵認証          │  ←────  │ ssh_user, ssh_key_prefix │
-│   自動セットアップ   │          │                          │
-│   dropbear/openssh   │          │ [command.xxx]            │
-│   自動対応           │          │ url, dir, bin, label     │
-│ ■ .conf読み込み      │          │                          │
-│ ■ テンプレート展開   │          │ [command.ssh]            │
-│ ■ 引数ディスパッチ   │          │ label (SSH only)         │
-└─────────────────────┘          └──────────────────────────┘
+openwrt-connect.exe              openwrt-connect.ini    openwrt-connect.conf
+(汎用コア)                        (ビルド設定)            (実行設定)
+┌─────────────────────┐          ┌────────────────┐     ┌──────────────────────┐
+│ ■ IPv4ゲートウェイ   │          │ [general]      │     │ [general]            │
+│   自動検出           │          │ product_name   │     │ default_ip, ssh_user │
+│ ■ SSH鍵認証          │          │                │     │ ssh_key_prefix       │
+│   自動セットアップ   │          │ [command.*]    │     │                      │
+│   dropbear/openssh   │  ←────  │ label, icon    │     │ [command.*]          │
+│   自動対応           │          └────────────────┘     │ script, url, cmd     │
+│ ■ .conf読み込み      │                                 └──────────────────────┘
+│ ■ 複数行script対応   │  ←──────────────────────────────────────┘
+│ ■ 引数ディスパッチ   │
+└─────────────────────┘
 ```
 
 ## ビルドフロー
@@ -27,7 +27,7 @@ openwrt-connect-build.bat
   │
   ├─ gcc: openwrt-connect.c → openwrt-connect.exe
   │
-  ├─ PowerShell: openwrt-connect.conf → Product.wxs (自動生成)
+  ├─ PowerShell: .ini → Product.wxs (自動生成)
   │    generate-wxs.ps1
   │      ├─ [general] → Product名, ディレクトリ名
   │      ├─ [command.*] → Feature, ショートカット
@@ -35,49 +35,64 @@ openwrt-connect-build.bat
   │
   └─ WiX: Product.wxs → openwrt-connect.msi
        ├─ openwrt-connect.exe (同梱)
-       └─ openwrt-connect.conf (同梱)
+       └─ .conf (同梱: 実行設定)
+```
+
+## ファイル構成
+
+| ファイル | 説明 | 用途 |
+|---|---|---|
+| `*.ini` | ビルド設定（ショートカット、アイコン） | ビルド時のみ |
+| `*.conf` | 実行設定（SSH、コマンド定義） | EXE実行時 |
+| `openwrt-connect.c` | メインソース（汎用コア） | |
+| `openwrt-connect.rc` | リソース定義 | |
+| `generate-wxs.ps1` | .ini → Product.wxs 生成 | |
+| `openwrt-connect-build.bat` | ビルドスクリプト | |
+| `Product.wxs` | **自動生成** (直接編集不要) | |
+| `app.manifest` | UAC管理者権限要求 | |
+| `wix-eula.rtf` | ライセンス | |
+| `*.ico` | アイコン各種 | |
+
+## コマンド定義（.conf）
+
+### 実行フィールド（優先順位: script > url > cmd）
+
+| フィールド | 動作 | 例 |
+|---|---|---|
+| `script` | シェルスクリプト実行 | インライン複数行 or `./file.sh` |
+| `url` | リモートスクリプトをwgetして実行 | `url = https://example.com/script.sh` |
+| `cmd` | 単一コマンドを直接実行 | `cmd = opkg update` |
+| (なし) | インタラクティブSSHセッション | |
+
+### script フィールドの書き方
+
+**インライン（複数行）:**
+```ini
+[command.mysetup]
+script =
+  #!/bin/sh
+  echo "Hello"
+  opkg update
+```
+
+**外部ファイル参照（EXEと同ディレクトリ）:**
+```ini
+[command.adguard]
+script = ./adguardhome.sh
 ```
 
 ## フォーク・カスタマイズ
 
-このツールは、独自のスクリプトランチャーとして自由にカスタマイズできます。
+1. `.ini`ファイルでアプリ名とショートカットを定義
 
-1. `.conf`ファイルの`[general]`セクションでアプリ名を変更
-> `.conf`ファイル名は自由です（例：`myrouter.conf`）。EXEは同じディレクトリの最初の`.conf`を自動検出します。
+> `.ini`と`.conf`のファイル名は自由です（例：`myrouter.ini` + `myrouter.conf`）。
+> EXEは同じディレクトリの最初の`.conf`を自動検出します。
 
-```ini
-[general]
-product_name = MyRouter
-```
+2. `.conf`ファイルでコマンドを定義
 
-2. 独自のコマンドを追加
-
-```ini
-[command.mysetup]
-label = My Custom Script
-icon = mysetup.ico
-url = https://example.com/my-script.sh
-dir = /tmp/mysetup
-bin = /usr/bin/mysetup
-
-[command.ssh]
-label = SSH Connection
-icon = openwrt-connect.ico
-```
-
-3. ビルド
-
-独自のアイコン（`.ico`）を配置すれば、インストーラーに自動的に含まれます。
-
-## コマンド追加手順
-
-1. `openwrt-connect.conf`に`[command.新コマンド名]`セクション追加
-2. 対応する`.ico`ファイルを配置（任意）
-3. `openwrt-connect-build.bat`実行 → EXE + MSI に自動反映
+3. `openwrt-connect-build.bat`でビルド
 
 ## ビルド方法
-
-> ソースからビルドする場合のみ必要です。
 
 ### 必要ツール
 
@@ -95,20 +110,6 @@ openwrt-connect-build.bat
 
 - `openwrt-connect.exe` - 実行ファイル
 - `openwrt-connect.msi` - インストーラー
-
-## ファイル一覧
-
-| ファイル | 説明 | 編集対象 |
-|---|---|---|
-| `openwrt-connect.conf` | コマンド定義（固有設定） | ○ |
-| `openwrt-connect.c` | メインソース（汎用コア） | |
-| `openwrt-connect.rc` | リソース定義 | |
-| `generate-wxs.ps1` | .conf → Product.wxs 生成 | |
-| `openwrt-connect-build.bat` | ビルドスクリプト | |
-| `Product.wxs` | **自動生成** (直接編集不要) | |
-| `app.manifest` | UAC管理者権限要求 | |
-| `license.rtf` | ライセンス | |
-| `*.ico` | アイコン各種 | |
 
 ## アイコン
 
