@@ -12,9 +12,10 @@ A launcher tool for `SSH` connection to `OpenWrt` devices and script execution f
 
 - **Router Auto-detection**: Automatically detects OpenWrt routers on the local network
 - **SSH Key Auto-setup**: Automatically generates and configures SSH key pairs
-- **Flexible Commands**: Supports script (inline/external file), url, and cmd execution modes
+- **Flexible Commands**: Supports script (external file/inline), url, and cmd execution modes
 - **SSH Package Auto-detection**: Automatically detects Dropbear or OpenSSH
 - **Clean Separation**: Build settings (.ini) and runtime config (.conf) are separate files
+- **No Script Modification**: EXE sends scripts as-is to SSH without any modification
 
 ## Requirements
 
@@ -82,7 +83,18 @@ Three execution modes can be defined in the `.conf` file.
 
 #### script - Shell Script Execution
 
-**Inline (multi-line):**
+**External file reference (.sh file in the same directory as EXE):**
+```ini
+[command.adguard]
+script = ./adguardhome.sh
+```
+
+EXE pipes the file as-is to SSH without any modification:
+```
+type "adguardhome.sh" | ssh root@<IP> "sh -s"
+```
+
+**Inline (directly in .conf):**
 ```ini
 [command.setup]
 script =
@@ -91,11 +103,7 @@ script =
   opkg install luci-i18n-base-ja
 ```
 
-**External file reference (same directory as EXE):**
-```ini
-[command.adguard]
-script = ./adguardhome.sh
-```
+EXE sends the script read from .conf directly to SSH stdin.
 
 #### url - Remote Script Execution
 
@@ -130,6 +138,8 @@ Build settings and runtime config are now separate files:
 | `*.ini` | Build settings (shortcuts, icons) | generate-wxs.ps1 |
 | `*.conf` | Runtime config (SSH, commands) | openwrt-connect.exe |
 
+EXE does not generate or modify scripts internally. It sends `.sh` files or inline scripts as-is.
+
 ### .ini (Build Settings)
 
 | Section | Description |
@@ -157,9 +167,20 @@ Build settings and runtime config are now separate files:
 
 | Field | Description | Priority |
 |---|---|---|
-| `script` | Shell script (inline or `./file.sh`) | 1 |
+| `script` | Shell script (`./file.sh` or inline) | 1 |
 | `url` | Remote script URL | 2 |
 | `cmd` | Single command | 3 |
+
+## File Structure Example
+
+```
+C:\Program Files\OpenWrt Connect\
+├── openwrt-connect.exe     ← Executable (generic core)
+├── aios-connect.conf       ← Runtime config
+├── aios2.sh                ← Script (sent as-is to SSH)
+├── aios.sh                 ← Script (sent as-is to SSH)
+└── openwrt-connect.ico     ← Icon
+```
 
 ## Security
 
@@ -175,10 +196,14 @@ Build settings and runtime config are now separate files:
 - Send information over the internet
 - Collect user data
 - Communicate with external servers (the EXE itself makes no external connections)
+- Modify or generate scripts (EXE never rewrites scripts internally)
 
 ### About script execution
 
-Scripts specified in the `url` field are downloaded and executed by the **OpenWrt device** via `wget`. The EXE itself makes no external connections.
+- `script` field: Pipes `.sh` files or inline scripts directly to SSH stdin
+- `url` field: Downloaded and executed by the **OpenWrt device** via `wget`
+
+The EXE itself makes no external connections.
 
 ## License
 
