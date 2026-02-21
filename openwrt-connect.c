@@ -657,8 +657,8 @@ int main(int argc, char *argv[])
                     "command -v %s >/dev/null 2>&1 || { "
                     "wget --no-check-certificate -O /tmp/%s.sh '%s' && "
                     "chmod +x /tmp/%s.sh && "
-                    "sh /tmp/%s.sh"
-                    " }; %s",
+                    "sh /tmp/%s.sh; "
+                    "}; %s",
                     target_cmd->name,
                     target_cmd->name, target_cmd->url,
                     target_cmd->name,
