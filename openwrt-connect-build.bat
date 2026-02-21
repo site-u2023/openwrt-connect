@@ -3,20 +3,39 @@ chcp 65001 >nul 2>&1
 setlocal
 
 echo ========================================
-echo OpenWrt Connect - Build Script
+echo OpenWrt Connect - Build Script v2.0.0
 echo ========================================
 echo.
 
 REM ----------------------------------------
-REM Verify config file exists
+REM Verify required files exist
 REM ----------------------------------------
-if not exist "openwrt-connect.conf" (
-    echo [ERROR] openwrt-connect.conf not found.
-    echo This file defines available commands.
+set "INI_FOUND="
+set "CONF_FOUND="
+
+for %%f in (*.ini) do (
+    if not defined INI_FOUND (
+        set "INI_FOUND=%%f"
+        echo INI:  %%f
+    )
+)
+for %%f in (*.conf) do (
+    if not defined CONF_FOUND (
+        set "CONF_FOUND=%%f"
+        echo CONF: %%f
+    )
+)
+
+if not defined INI_FOUND (
+    echo [ERROR] No .ini file found ^(build settings^).
     pause
     exit /b 1
 )
-echo Config: openwrt-connect.conf found
+if not defined CONF_FOUND (
+    echo [ERROR] No .conf file found ^(runtime config^).
+    pause
+    exit /b 1
+)
 echo.
 
 REM ----------------------------------------
@@ -73,11 +92,10 @@ if not exist "%WIXPATH%\candle.exe" (
 )
 
 REM ----------------------------------------
-REM Generate Product.wxs from config
+REM Generate Product.wxs from .ini
 REM ----------------------------------------
-echo Generating Product.wxs from openwrt-connect.conf...
+echo Generating Product.wxs from %INI_FOUND%...
 
-REM Try PowerShell 7 first (pwsh), then fall back to Windows PowerShell (powershell)
 set "PS_EXE="
 
 pwsh -Command "exit 0" >nul 2>&1
@@ -119,7 +137,7 @@ echo.
 echo ========================================
 echo Build completed!
 echo ========================================
-echo Output: openwrt-connect.exe + openwrt-connect.conf
+echo Output: openwrt-connect.exe + %CONF_FOUND%
 echo   MSI: openwrt-connect.msi
 echo.
 pause
