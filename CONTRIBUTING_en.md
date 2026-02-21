@@ -42,7 +42,8 @@ openwrt-connect-build.bat
 
 This tool can be freely customized as your own script launcher.
 
-1. Change the app name in the `[general]` section of `openwrt-connect.conf`
+1. Change the app name in the `[general]` section of your `.conf` file
+> The `.conf` filename is flexible (e.g., `myrouter.conf`). The EXE auto-detects the first `.conf` in its directory.
 
 ```ini
 [general]
