@@ -6,8 +6,6 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -16,6 +14,6 @@ jobs:
         run: openwrt-connect-build.bat
 
       - name: Upload to release
-        run: gh release upload v1.0.0 openwrt-connect.msi --clobber
+        run: gh release upload v2.0.0 openwrt-connect.msi --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
