@@ -12,9 +12,10 @@
 
 - **ルーター自動検出**：ローカルネットワーク内のOpenWrtルーターを自動検出
 - **鍵認証自動設定**：SSH鍵ペアを自動で生成・設定
-- **柔軟なコマンド定義**：script（インライン/外部ファイル）、url、cmdの3方式に対応
+- **柔軟なコマンド定義**：script（外部ファイル/インライン）、url、cmdの3方式に対応
 - **SSHパッケージ自動判別**：DropbearとOpenSSHを自動で判別
 - **設定ファイル分離**：ビルド設定（.ini）と実行設定（.conf）を分離した明確な設計
+- **スクリプト無加工**：EXEはスクリプトを一切加工せず、そのままSSHに送信
 
 ## 動作環境
 
@@ -82,7 +83,18 @@ type "%USERPROFILE%\.ssh\openwrt-connect_<IP>_rsa.pub" | ssh root@<IP> "cat >> /
 
 #### script - シェルスクリプト実行
 
-**インライン（複数行）：**
+**外部ファイル参照（EXEと同ディレクトリの.shファイル）：**
+```ini
+[command.adguard]
+script = ./adguardhome.sh
+```
+
+EXEはファイルを一切加工せず、そのままSSHにパイプします：
+```
+type "adguardhome.sh" | ssh root@<IP> "sh -s"
+```
+
+**インライン（.conf内に直接記述）：**
 ```ini
 [command.setup]
 script =
@@ -91,11 +103,7 @@ script =
   opkg install luci-i18n-base-ja
 ```
 
-**外部ファイル参照（EXEと同ディレクトリ）：**
-```ini
-[command.adguard]
-script = ./adguardhome.sh
-```
+EXEはconfから読み込んだスクリプトをそのままSSHのstdinに送信します。
 
 #### url - リモートスクリプト実行
 
@@ -130,6 +138,8 @@ cmd = opkg update && opkg upgrade luci
 | `*.ini` | ビルド設定（ショートカット、アイコン） | generate-wxs.ps1 |
 | `*.conf` | 実行設定（SSH、コマンド定義） | openwrt-connect.exe |
 
+EXEはスクリプトを内部で生成・加工しません。`.sh`ファイルまたは`.conf`内のスクリプトをそのまま送信します。
+
 ### .ini（ビルド設定）
 
 | セクション | 説明 |
@@ -157,9 +167,20 @@ cmd = opkg update && opkg upgrade luci
 
 | フィールド | 説明 | 優先順位 |
 |---|---|---|
-| `script` | シェルスクリプト（インライン or `./file.sh`） | 1 |
+| `script` | シェルスクリプト（`./file.sh` or インライン） | 1 |
 | `url` | リモートスクリプトURL | 2 |
 | `cmd` | 単一コマンド | 3 |
+
+## ファイル構成例
+
+```
+C:\Program Files\OpenWrt Connect\
+├── openwrt-connect.exe     ← 実行ファイル（汎用コア）
+├── aios-connect.conf       ← 実行設定
+├── aios2.sh                ← スクリプト（そのままSSHに送信）
+├── aios.sh                 ← スクリプト（そのままSSHに送信）
+└── openwrt-connect.ico     ← アイコン
+```
 
 ## セキュリティ
 
@@ -175,10 +196,14 @@ cmd = opkg update && opkg upgrade luci
 - インターネット経由での情報送信
 - ユーザーデータの収集
 - 外部サーバーへの通信（EXE自体は通信しません）
+- スクリプトの加工・生成（EXE内部でスクリプトを書き換えません）
 
 ### スクリプト実行について
 
-`url`フィールドで指定したスクリプトは、**OpenWrtデバイス側**が`wget`でダウンロードして実行します。EXE自体は外部通信を行いません。
+- `script`フィールド：`.sh`ファイルまたはインラインスクリプトをそのままSSHのstdinにパイプして実行
+- `url`フィールド：**OpenWrtデバイス側**が`wget`でダウンロードして実行
+
+EXE自体は外部通信を行いません。
 
 ## ライセンス
 
