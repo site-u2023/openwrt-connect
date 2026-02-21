@@ -652,13 +652,12 @@ int main(int argc, char *argv[])
                 break;
 
             case CMD_TYPE_URL:
-                /* URLからwgetして実行 */
                 snprintf(remote_cmd, sizeof(remote_cmd),
-                    "command -v %s >/dev/null 2>&1 || { "
+                    "if ! command -v %s >/dev/null 2>&1; then "
                     "wget --no-check-certificate -O /tmp/%s.sh '%s' && "
                     "chmod +x /tmp/%s.sh && "
                     "sh /tmp/%s.sh; "
-                    "}; %s",
+                    "fi; %s",
                     target_cmd->name,
                     target_cmd->name, target_cmd->url,
                     target_cmd->name,
