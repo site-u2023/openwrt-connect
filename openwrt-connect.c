@@ -1,10 +1,13 @@
 /*
- * openwrt-connect.exe - Remote Setup Tool (Modular)
+ * openwrt-connect.exe - Remote Setup Tool v2.0.0
  *
  * Core features (built-in):
  *   - IPv4 gateway auto-detection
  *   - SSH key authentication management
  *   - .conf file driven command execution
+ *     - script: inline multi-line or ./file.sh reference
+ *     - url:    wget remote script and execute
+ *     - cmd:    direct command execution
  *
  * Usage:
  *   openwrt-connect.exe                  Interactive SSH connection
@@ -13,8 +16,9 @@
  *   openwrt-connect.exe --help           Show usage
  *
  * Configuration:
- *   Reads openwrt-connect.conf from the same directory as the executable.
+ *   Reads .conf from the same directory as the executable.
  *   Commands are defined as [command.<name>] sections.
+ *   Build settings (.ini) are separate and used only by generate-wxs.ps1.
  */
 #define _WIN32_WINNT 0x0600
 #include <winsock2.h>
@@ -33,8 +37,10 @@
 /* ================================================== */
 #define MAX_COMMANDS        16
 #define MAX_VALUE_LEN       512
+#define MAX_SCRIPT_LEN      8192
 #define MAX_LINE_LEN        1024
-#define MAX_CMD_BUF         8192
+#define MAX_CMD_BUF         16384
+
 /* .conf自動検出: exeと同ディレクトリの最初の.confファイルを使用 */
 static int find_conf_file(const char *exe_dir, char *conf_path, size_t size)
 {
@@ -62,13 +68,19 @@ static int find_conf_file(const char *exe_dir, char *conf_path, size_t size)
 /* ================================================== */
 /* Data structures                                    */
 /* ================================================== */
+typedef enum {
+    CMD_TYPE_SSH,       /* No script/url/cmd = interactive SSH */
+    CMD_TYPE_SCRIPT,    /* script field (inline or ./file.sh) */
+    CMD_TYPE_URL,       /* url field (wget & execute) */
+    CMD_TYPE_CMD        /* cmd field (direct command) */
+} CmdType;
+
 typedef struct {
-    char name[64];           /* command name (section key) */
-    char label[MAX_VALUE_LEN];
-    char icon[MAX_VALUE_LEN];
+    char name[64];
     char url[MAX_VALUE_LEN];
-    char dir[MAX_VALUE_LEN];
-    char bin[MAX_VALUE_LEN];
+    char cmd[MAX_VALUE_LEN];
+    char script[MAX_SCRIPT_LEN];
+    CmdType type;
 } CommandDef;
 
 typedef struct {
@@ -98,7 +110,9 @@ int send_public_key(const char *sysroot, const char *pub_path, const char *ip, c
 /* Config */
 int load_config(const char *exe_path, Config *cfg);
 CommandDef* find_command(Config *cfg, const char *name);
-void build_install_script(const CommandDef *cmd, char *buf, size_t size);
+
+/* Script file loader */
+int load_script_file(const char *exe_dir, const char *filename, char *buf, size_t size);
 
 /* ================================================== */
 /* Utility functions                                  */
@@ -273,6 +287,45 @@ int send_public_key(const char *sysroot, const char *pub_path, const char *ip, c
 }
 
 /* ================================================== */
+/* Script file loader                                 */
+/* ================================================== */
+/*
+ * ./file.sh 形式の場合、EXEと同ディレクトリのファイルを読み込む
+ */
+int load_script_file(const char *exe_dir, const char *filename, char *buf, size_t size)
+{
+    char filepath[MAX_VALUE_LEN];
+    FILE *fp;
+    size_t total = 0;
+    char line[MAX_LINE_LEN];
+
+    /* ./ を除去してパス構築 */
+    const char *name = filename;
+    if (name[0] == '.' && (name[1] == '/' || name[1] == '\\')) {
+        name += 2;
+    }
+
+    snprintf(filepath, sizeof(filepath), "%s%s", exe_dir, name);
+
+    fp = fopen(filepath, "r");
+    if (!fp) {
+        printf("[ERROR] Script file not found: %s\n", filepath);
+        return 0;
+    }
+
+    buf[0] = '\0';
+    while (fgets(line, sizeof(line), fp)) {
+        size_t len = strlen(line);
+        if (total + len >= size - 1) break;
+        strcat(buf, line);
+        total += len;
+    }
+
+    fclose(fp);
+    return 1;
+}
+
+/* ================================================== */
 /* Configuration file parser                          */
 /* ================================================== */
 int load_config(const char *exe_path, Config *cfg)
@@ -281,13 +334,14 @@ int load_config(const char *exe_path, Config *cfg)
     char line[MAX_LINE_LEN];
     char current_section[128] = {0};
     char current_command[64] = {0};
+    int reading_script = 0;
     FILE *fp;
 
     /* defaults */
     strcpy(cfg->product_name, "OpenWrt Connect");
     strcpy(cfg->default_ip, "192.168.1.1");
     strcpy(cfg->ssh_user, "root");
-    strcpy(cfg->ssh_key_prefix, "owrt-connect");
+    strcpy(cfg->ssh_key_prefix, "openwrt-connect");
     cfg->command_count = 0;
 
     /* .confのパスを構築 (EXEと同じディレクトリの.confを自動検出) */
@@ -305,6 +359,35 @@ int load_config(const char *exe_path, Config *cfg)
     }
 
     while (fgets(line, sizeof(line), fp)) {
+        /* 複数行script読み込み中 */
+        if (reading_script && cfg->command_count > 0) {
+            char trimmed[MAX_LINE_LEN];
+            strncpy(trimmed, line, sizeof(trimmed) - 1);
+            trimmed[sizeof(trimmed) - 1] = '\0';
+            trim(trimmed);
+
+            /* 空行・コメント行はスクリプトの一部として含めない */
+            /* 新しいセクションヘッダまたはkey=valueで終了 */
+            if (trimmed[0] == '[' || (trimmed[0] != '#' && trimmed[0] != '\0' && strchr(trimmed, '=') && trimmed[0] != ' ' && trimmed[0] != '\t')) {
+                reading_script = 0;
+                /* このlineを再処理する必要がある → fallthrough */
+            } else if (trimmed[0] == '#' || trimmed[0] == '\0') {
+                /* 空行・コメントはスキップ */
+                continue;
+            } else {
+                /* スクリプト行を追加 (先頭のインデントを除去) */
+                CommandDef *c = &cfg->commands[cfg->command_count - 1];
+                size_t cur_len = strlen(c->script);
+                char *content = line;
+                /* 先頭の2スペースインデントを除去 */
+                if (content[0] == ' ' && content[1] == ' ') content += 2;
+                if (cur_len + strlen(content) < MAX_SCRIPT_LEN - 1) {
+                    strcat(c->script, content);
+                }
+                continue;
+            }
+        }
+
         trim(line);
 
         /* 空行・コメント行をスキップ */
@@ -326,6 +409,7 @@ int load_config(const char *exe_path, Config *cfg)
                         memset(c, 0, sizeof(CommandDef));
                         strncpy(c->name, cmd_name, sizeof(c->name) - 1);
                         strncpy(current_command, cmd_name, sizeof(current_command) - 1);
+                        c->type = CMD_TYPE_SSH;
                         cfg->command_count++;
                     }
                 } else {
@@ -363,20 +447,44 @@ int load_config(const char *exe_path, Config *cfg)
         /* [command.*] セクション */
         if (current_command[0] != '\0' && cfg->command_count > 0) {
             CommandDef *c = &cfg->commands[cfg->command_count - 1];
-            if (strcmp(key, "label") == 0)
-                strncpy(c->label, val, sizeof(c->label) - 1);
-            else if (strcmp(key, "icon") == 0)
-                strncpy(c->icon, val, sizeof(c->icon) - 1);
-            else if (strcmp(key, "url") == 0)
+            if (strcmp(key, "script") == 0) {
+                if (val[0] != '\0') {
+                    /* script = ./file.sh または script = inline one-liner */
+                    strncpy(c->script, val, sizeof(c->script) - 1);
+                    c->type = CMD_TYPE_SCRIPT;
+                } else {
+                    /* script = (空) → 次行から複数行読み込み開始 */
+                    c->script[0] = '\0';
+                    c->type = CMD_TYPE_SCRIPT;
+                    reading_script = 1;
+                }
+            }
+            else if (strcmp(key, "url") == 0) {
                 strncpy(c->url, val, sizeof(c->url) - 1);
-            else if (strcmp(key, "dir") == 0)
-                strncpy(c->dir, val, sizeof(c->dir) - 1);
-            else if (strcmp(key, "bin") == 0)
-                strncpy(c->bin, val, sizeof(c->bin) - 1);
+                if (c->type == CMD_TYPE_SSH) c->type = CMD_TYPE_URL;
+            }
+            else if (strcmp(key, "cmd") == 0) {
+                strncpy(c->cmd, val, sizeof(c->cmd) - 1);
+                if (c->type == CMD_TYPE_SSH) c->type = CMD_TYPE_CMD;
+            }
         }
     }
 
     fclose(fp);
+
+    /* ./file.sh 参照の解決 */
+    for (int i = 0; i < cfg->command_count; i++) {
+        CommandDef *c = &cfg->commands[i];
+        if (c->type == CMD_TYPE_SCRIPT && c->script[0] == '.' &&
+            (c->script[1] == '/' || c->script[1] == '\\')) {
+            char filename[MAX_VALUE_LEN];
+            strncpy(filename, c->script, sizeof(filename) - 1);
+            filename[sizeof(filename) - 1] = '\0';
+            c->script[0] = '\0';
+            load_script_file(exe_path, filename, c->script, sizeof(c->script));
+        }
+    }
+
     return 1;
 }
 
@@ -388,51 +496,6 @@ CommandDef* find_command(Config *cfg, const char *name)
         }
     }
     return NULL;
-}
-
-/* ================================================== */
-/* Install script generator (template-based)          */
-/* ================================================== */
-/*
- * テンプレートからインストールスクリプトを生成
- * .confの url, dir, bin から組み立てる
- *
- * 生成されるスクリプト:
- *   #!/bin/sh
- *   DIR="<dir>"
- *   mkdir -p "$DIR"
- *   CACHE="?t=$(date +%s)"
- *   wget --no-check-certificate -O "$DIR/<script>.sh" "<url>${CACHE}"
- *   chmod +x "$DIR/<script>.sh"
- *   sh "$DIR/<script>.sh" "$@"
- */
-void build_install_script(const CommandDef *cmd, char *buf, size_t size)
-{
-    /* <name>.sh をURLの末尾から抽出、なければコマンド名を使う */
-    const char *url_file = strrchr(cmd->url, '/');
-    char script_name[128];
-    if (url_file) {
-        strncpy(script_name, url_file + 1, sizeof(script_name) - 1);
-        script_name[sizeof(script_name) - 1] = '\0';
-        /* クエリパラメータがあれば除去 */
-        char *qmark = strchr(script_name, '?');
-        if (qmark) *qmark = '\0';
-    } else {
-        snprintf(script_name, sizeof(script_name), "%s.sh", cmd->name);
-    }
-
-    snprintf(buf, size,
-        "printf '#!/bin/sh\\n"
-        "CONFIG_DIR=\\\"%s\\\"\\n"
-        "mkdir -p \\\"$CONFIG_DIR\\\"\\n"
-        "CACHE_BUSTER=\\\"?t=$(date +%%%%s)\\\"\\n"
-        "wget --no-check-certificate -O \\\"$CONFIG_DIR/%s\\\" \\\"%s${CACHE_BUSTER}\\\"\\n"
-        "chmod +x \\\"$CONFIG_DIR/%s\\\"\\n"
-        "sh \\\"$CONFIG_DIR/%s\\\" \\\"$@\\\"\\n' > %s && "
-        "chmod +x %s",
-        cmd->dir, script_name, cmd->url,
-        script_name, script_name,
-        cmd->bin, cmd->bin);
 }
 
 /* ================================================== */
@@ -474,13 +537,18 @@ int main(int argc, char *argv[])
         printf("Available commands (.conf):\n\n");
         for (int i = 0; i < cfg.command_count; i++) {
             CommandDef *c = &cfg.commands[i];
-            if (c->url[0] != '\0') {
-                printf("  %-12s %s\n", c->name, c->label);
-                printf("  %12s url: %s\n", "", c->url);
-                printf("  %12s bin: %s\n", "", c->bin);
-            } else {
-                printf("  %-12s %s (SSH only)\n", c->name, c->label);
+            const char *type_str;
+            switch (c->type) {
+                case CMD_TYPE_SCRIPT: type_str = "script"; break;
+                case CMD_TYPE_URL:    type_str = "url"; break;
+                case CMD_TYPE_CMD:    type_str = "cmd"; break;
+                default:              type_str = "SSH only"; break;
             }
+            printf("  %-12s (%s)\n", c->name, type_str);
+            if (c->type == CMD_TYPE_URL)
+                printf("  %12s url: %s\n", "", c->url);
+            if (c->type == CMD_TYPE_CMD)
+                printf("  %12s cmd: %s\n", "", c->cmd);
             printf("\n");
         }
         return 0;
@@ -493,7 +561,7 @@ int main(int argc, char *argv[])
             printf("[ERROR] Unknown command: %s\n\n", arg);
             printf("Available commands:\n");
             for (int i = 0; i < cfg.command_count; i++) {
-                printf("  %s - %s\n", cfg.commands[i].name, cfg.commands[i].label);
+                printf("  %s\n", cfg.commands[i].name);
             }
             printf("\nUse --help for more information.\n");
             system("pause");
@@ -501,20 +569,19 @@ int main(int argc, char *argv[])
         }
     }
 
-    /* SSH-onlyコマンドの判定 (urlが空 = SSHセッション) */
-    int is_ssh_only = (!target_cmd || target_cmd->url[0] == '\0');
-    int is_remote_cmd = (target_cmd && target_cmd->url[0] != '\0');
+    /* コマンドタイプの判定 */
+    CmdType cmd_type = target_cmd ? target_cmd->type : CMD_TYPE_SSH;
+    int is_ssh_only = (cmd_type == CMD_TYPE_SSH);
 
     /* バナー表示 */
     printf("========================================\n");
-    if (is_remote_cmd) {
-        printf("%s - %s\n", cfg.product_name, target_cmd->label);
-    } else if (target_cmd) {
-        printf("%s - %s\n", cfg.product_name, target_cmd->label);
+    printf("%s", cfg.product_name);
+    if (target_cmd) {
+        printf(" - %s", target_cmd->name);
     } else {
-        printf("%s - SSH Connection\n", cfg.product_name);
+        printf(" - SSH Connection");
     }
-    printf("========================================\n\n");
+    printf("\n========================================\n\n");
 
     /* IPアドレス検出・入力 */
     if (!detect_router_ip(ip, sizeof(ip))) {
@@ -549,34 +616,7 @@ int main(int argc, char *argv[])
     }
 
     /* SSHコマンドの構築 */
-    if (is_remote_cmd) {
-        /* リモートコマンド実行モード */
-        char install_script[4096];
-        build_install_script(target_cmd, install_script, sizeof(install_script));
-
-        printf("\nTarget: %s@%s\n", cfg.ssh_user, ip);
-        printf("Command: %s\n\n", target_cmd->name);
-        printf("Connecting and executing command...\n\n");
-
-        if (use_key) {
-            snprintf(cmd, sizeof(cmd),
-                "%s\\System32\\OpenSSH\\ssh.exe"
-                SSH_OPTS
-                " -i \"%s\""
-                " -tt %s@%s"
-                " \"command -v %s >/dev/null 2>&1 || (%s); %s\"",
-                sysroot, key_path, cfg.ssh_user, ip,
-                target_cmd->name, install_script, target_cmd->name);
-        } else {
-            snprintf(cmd, sizeof(cmd),
-                "%s\\System32\\OpenSSH\\ssh.exe"
-                SSH_OPTS
-                " -tt %s@%s"
-                " \"command -v %s >/dev/null 2>&1 || (%s); %s\"",
-                sysroot, cfg.ssh_user, ip,
-                target_cmd->name, install_script, target_cmd->name);
-        }
-    } else {
+    if (is_ssh_only) {
         /* インタラクティブSSHモード */
         printf("\nTarget: %s@%s\n\n", cfg.ssh_user, ip);
         printf("Connecting...\n\n");
@@ -595,11 +635,69 @@ int main(int argc, char *argv[])
                 " -tt %s@%s",
                 sysroot, cfg.ssh_user, ip);
         }
+    } else {
+        /* コマンド実行モード */
+        char remote_cmd[MAX_SCRIPT_LEN] = {0};
+
+        printf("\nTarget: %s@%s\n", cfg.ssh_user, ip);
+        printf("Command: %s\n\n", target_cmd->name);
+        printf("Connecting and executing command...\n\n");
+
+        switch (cmd_type) {
+            case CMD_TYPE_SCRIPT:
+                /* スクリプト本体をSSH経由で実行 */
+                snprintf(remote_cmd, sizeof(remote_cmd),
+                    "command -v %s >/dev/null 2>&1 || { %s }; %s",
+                    target_cmd->name, target_cmd->script, target_cmd->name);
+                break;
+
+            case CMD_TYPE_URL:
+                /* URLからwgetして実行 */
+                snprintf(remote_cmd, sizeof(remote_cmd),
+                    "command -v %s >/dev/null 2>&1 || { "
+                    "wget --no-check-certificate -O /tmp/%s.sh '%s' && "
+                    "chmod +x /tmp/%s.sh && "
+                    "sh /tmp/%s.sh"
+                    " }; %s",
+                    target_cmd->name,
+                    target_cmd->name, target_cmd->url,
+                    target_cmd->name,
+                    target_cmd->name,
+                    target_cmd->name);
+                break;
+
+            case CMD_TYPE_CMD:
+                /* コマンドをそのまま実行 */
+                strncpy(remote_cmd, target_cmd->cmd, sizeof(remote_cmd) - 1);
+                break;
+
+            default:
+                break;
+        }
+
+        if (use_key) {
+            snprintf(cmd, sizeof(cmd),
+                "%s\\System32\\OpenSSH\\ssh.exe"
+                SSH_OPTS
+                " -i \"%s\""
+                " -tt %s@%s"
+                " \"%s\"",
+                sysroot, key_path, cfg.ssh_user, ip,
+                remote_cmd);
+        } else {
+            snprintf(cmd, sizeof(cmd),
+                "%s\\System32\\OpenSSH\\ssh.exe"
+                SSH_OPTS
+                " -tt %s@%s"
+                " \"%s\"",
+                sysroot, cfg.ssh_user, ip,
+                remote_cmd);
+        }
     }
 
     int ret = system(cmd);
 
-    if (is_remote_cmd) {
+    if (!is_ssh_only) {
         printf("\n========================================\n");
         if (ret == 0) {
             printf("Completed successfully\n");
