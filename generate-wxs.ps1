@@ -7,6 +7,7 @@
     a WiX installer definition with matching features and shortcuts.
     
     v2.0.0: Changed from .conf to .ini (build settings separated from runtime config)
+    Automatically detects and bundles .sh script files alongside .exe and .conf.
 
 .NOTES
     Called by build.bat before WiX compilation.
@@ -40,6 +41,19 @@ if ($null -eq $confFile) {
 }
 $confFileName = $confFile.Name
 Write-Host "Auto-detected conf: $confFileName"
+
+# ================================================== #
+# Detect .sh script files for bundling into MSI      #
+# ================================================== #
+$shFiles = @(Get-ChildItem -Path "." -Filter "*.sh")
+if ($shFiles.Count -gt 0) {
+    Write-Host "Script files found: $($shFiles.Count)"
+    foreach ($sh in $shFiles) {
+        Write-Host "  $($sh.Name)"
+    }
+} else {
+    Write-Host "No .sh script files found."
+}
 
 # ================================================== #
 # Parse .ini file                                    #
@@ -112,7 +126,7 @@ function Get-DeterministicGuid {
 # Build WiX XML                                      #
 # ================================================== #
 # WiX ID sanitizer: hyphens to underscores
-function Sanitize-Id { param([string]$s) return $s -replace '-', '_' }
+function Sanitize-Id { param([string]$s) return $s -replace '[^a-zA-Z0-9_.]', '_' }
 
 $ini = Parse-Ini -Path $IniFile
 $gen = $ini.General
@@ -164,6 +178,10 @@ W '    <!-- Features -->'
 W '    <Feature Id="FeatureMain" Title="Core" Description="Main executable and configuration" Level="1" Absent="disallow">'
 W '      <ComponentRef Id="ExeComponent" />'
 W '      <ComponentRef Id="ConfComponent" />'
+foreach ($sh in $shFiles) {
+    $shCompId = "ShComponent_$(Sanitize-Id ([System.IO.Path]::GetFileNameWithoutExtension($sh.Name)))"
+    W "      <ComponentRef Id=`"$shCompId`" />"
+}
 W '    </Feature>'
 W ''
 
@@ -193,7 +211,7 @@ W '    </Directory>'
 W ''
 
 # ================================================== #
-# Main executable + conf                             #
+# Main executable + conf + script files              #
 # ================================================== #
 W '    <!-- Main files -->'
 W '    <DirectoryRef Id="INSTALLFOLDER">'
@@ -204,6 +222,18 @@ $confFileId = Sanitize-Id ([System.IO.Path]::GetFileNameWithoutExtension($confFi
 W "      <Component Id=`"ConfComponent`" Guid=`"E7A3B1D4-5F28-4C9A-A6E1-8D0F2B7C3E95`">"
 W "        <File Id=`"$confFileId`" Source=`"$confFileName`" KeyPath=`"yes`" />"
 W '      </Component>'
+
+# .sh script files
+foreach ($sh in $shFiles) {
+    $shBaseName = [System.IO.Path]::GetFileNameWithoutExtension($sh.Name)
+    $shCompId = "ShComponent_$(Sanitize-Id $shBaseName)"
+    $shFileId = "sh_$(Sanitize-Id $shBaseName)"
+    $shGuid = Get-DeterministicGuid -Seed "shfile_$($sh.Name)_v2"
+    W "      <Component Id=`"$shCompId`" Guid=`"$shGuid`">"
+    W "        <File Id=`"$shFileId`" Source=`"$($sh.Name)`" KeyPath=`"yes`" />"
+    W '      </Component>'
+}
+
 W '    </DirectoryRef>'
 W ''
 
@@ -310,4 +340,10 @@ Write-Host "  Source: $iniFileName (build settings) + $confFileName (runtime con
 Write-Host "  Commands: $($cmds.Count)"
 foreach ($cmd in $cmds) {
     Write-Host "    $($cmd.name) - $($cmd.label)"
+}
+if ($shFiles.Count -gt 0) {
+    Write-Host "  Script files: $($shFiles.Count)"
+    foreach ($sh in $shFiles) {
+        Write-Host "    $($sh.Name)"
+    }
 }
