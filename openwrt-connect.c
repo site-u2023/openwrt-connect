@@ -471,7 +471,7 @@ int main(int argc, char *argv[])
 
     /* --list */
     if (arg && strcmp(arg, "--list") == 0) {
-        printf("Available commands (%s):\n\n", CONF_FILENAME);
+        printf("Available commands (.conf):\n\n");
         for (int i = 0; i < cfg.command_count; i++) {
             CommandDef *c = &cfg.commands[i];
             if (c->url[0] != '\0') {
