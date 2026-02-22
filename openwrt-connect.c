@@ -451,8 +451,15 @@ static int exec_script_file(const CommandDef *target_cmd,
                             const char *exe_dir)
 {
     char filepath[MAX_VALUE_LEN];
+    char ssh_cmdline[MAX_CMD_BUF];
     char cmd[MAX_CMD_BUF];
-    int ret;
+    SECURITY_ATTRIBUTES sa;
+    HANDLE hReadPipe, hWritePipe;
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    DWORD written, exit_code;
+    FILE *fp;
+    int ch;
 
     /* ./を除去してフルパスを構築 */
     const char *name = target_cmd->script;
@@ -466,24 +473,78 @@ static int exec_script_file(const CommandDef *target_cmd,
         return 1;
     }
 
-    /* Step 1: スクリプトをそのままパイプで送信 */
-    printf("Installing %s...\n", target_cmd->name);
-    if (key_path) {
-        snprintf(cmd, sizeof(cmd),
-            "type \"%s\" | %s\\System32\\OpenSSH\\ssh.exe"
-            SSH_OPTS
-            " -i \"%s\" %s@%s \"sh -s\"",
-            filepath, sysroot, key_path, user, ip);
-    } else {
-        snprintf(cmd, sizeof(cmd),
-            "type \"%s\" | %s\\System32\\OpenSSH\\ssh.exe"
-            SSH_OPTS
-            " %s@%s \"sh -s\"",
-            filepath, sysroot, user, ip);
+    fp = fopen(filepath, "rb");
+    if (!fp) {
+        printf("[ERROR] Cannot open script file: %s\n", filepath);
+        return 1;
     }
 
-    ret = system(cmd);
-    if (ret != 0) return ret;
+    /* Step 1: ファイルをパイプで送信 (\r除去) */
+    printf("Installing %s...\n", target_cmd->name);
+
+    if (key_path) {
+        snprintf(ssh_cmdline, sizeof(ssh_cmdline),
+            "%s\\System32\\OpenSSH\\ssh.exe"
+            SSH_OPTS
+            " -i \"%s\" %s@%s \"sh -s\"",
+            sysroot, key_path, user, ip);
+    } else {
+        snprintf(ssh_cmdline, sizeof(ssh_cmdline),
+            "%s\\System32\\OpenSSH\\ssh.exe"
+            SSH_OPTS
+            " %s@%s \"sh -s\"",
+            sysroot, user, ip);
+    }
+
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = NULL;
+    sa.bInheritHandle = TRUE;
+
+    if (!CreatePipe(&hReadPipe, &hWritePipe, &sa, 0)) {
+        printf("[ERROR] Failed to create pipe.\n");
+        fclose(fp);
+        return 1;
+    }
+
+    SetHandleInformation(hWritePipe, HANDLE_FLAG_INHERIT, 0);
+
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdInput = hReadPipe;
+    si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+    si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+
+    ZeroMemory(&pi, sizeof(pi));
+
+    if (!CreateProcessA(NULL, ssh_cmdline, NULL, NULL, TRUE,
+                        0, NULL, NULL, &si, &pi)) {
+        printf("[ERROR] Failed to start SSH process.\n");
+        CloseHandle(hReadPipe);
+        CloseHandle(hWritePipe);
+        fclose(fp);
+        return 1;
+    }
+
+    CloseHandle(hReadPipe);
+
+    /* ファイルをそのまま書き込む (\rのみ除去) */
+    while ((ch = fgetc(fp)) != EOF) {
+        if (ch == '\r') continue;
+        char c = (char)ch;
+        WriteFile(hWritePipe, &c, 1, &written, NULL);
+    }
+
+    fclose(fp);
+    CloseHandle(hWritePipe);
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+    if (exit_code != 0) return (int)exit_code;
 
     /* Step 2: コマンドを対話的に実行 */
     printf("Running %s...\n\n", target_cmd->name);
