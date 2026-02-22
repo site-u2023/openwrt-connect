@@ -452,6 +452,7 @@ static int exec_script_file(const CommandDef *target_cmd,
 {
     char filepath[MAX_VALUE_LEN];
     char cmd[MAX_CMD_BUF];
+    int ret;
 
     /* ./を除去してフルパスを構築 */
     const char *name = target_cmd->script;
@@ -465,6 +466,8 @@ static int exec_script_file(const CommandDef *target_cmd,
         return 1;
     }
 
+    /* Step 1: スクリプトをそのままパイプで送信 */
+    printf("Installing %s...\n", target_cmd->name);
     if (key_path) {
         snprintf(cmd, sizeof(cmd),
             "type \"%s\" | %s\\System32\\OpenSSH\\ssh.exe"
@@ -477,6 +480,26 @@ static int exec_script_file(const CommandDef *target_cmd,
             SSH_OPTS
             " %s@%s \"sh -s\"",
             filepath, sysroot, user, ip);
+    }
+
+    ret = system(cmd);
+    if (ret != 0) return ret;
+
+    /* Step 2: コマンドを対話的に実行 */
+    printf("Running %s...\n\n", target_cmd->name);
+    if (key_path) {
+        snprintf(cmd, sizeof(cmd),
+            "%s\\System32\\OpenSSH\\ssh.exe"
+            SSH_OPTS
+            " -i \"%s\""
+            " -tt %s@%s %s",
+            sysroot, key_path, user, ip, target_cmd->name);
+    } else {
+        snprintf(cmd, sizeof(cmd),
+            "%s\\System32\\OpenSSH\\ssh.exe"
+            SSH_OPTS
+            " -tt %s@%s %s",
+            sysroot, user, ip, target_cmd->name);
     }
 
     return system(cmd);
@@ -567,7 +590,26 @@ static int exec_script_inline(const CommandDef *target_cmd,
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 
-    return (int)exit_code;
+    if (exit_code != 0) return (int)exit_code;
+
+    /* Step 2: コマンドを対話的に実行 */
+    printf("Running %s...\n\n", target_cmd->name);
+    if (key_path) {
+        snprintf(ssh_cmdline, sizeof(ssh_cmdline),
+            "%s\\System32\\OpenSSH\\ssh.exe"
+            SSH_OPTS
+            " -i \"%s\""
+            " -tt %s@%s %s",
+            sysroot, key_path, user, ip, target_cmd->name);
+    } else {
+        snprintf(ssh_cmdline, sizeof(ssh_cmdline),
+            "%s\\System32\\OpenSSH\\ssh.exe"
+            SSH_OPTS
+            " -tt %s@%s %s",
+            sysroot, user, ip, target_cmd->name);
+    }
+
+    return system(ssh_cmdline);
 }
 
 /* ================================================== */
