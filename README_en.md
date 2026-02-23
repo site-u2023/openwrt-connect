@@ -12,7 +12,7 @@ A launcher tool for `SSH` connection to `OpenWrt` devices and script execution f
 
 - **Router Auto-detection**: Automatically detects OpenWrt routers on the local network
 - **SSH Key Auto-setup**: Automatically generates and configures SSH key pairs
-- **Flexible Commands**: Supports script (external file/inline), url, and cmd execution modes
+- **Flexible Commands**: Supports script (external file), url, and cmd execution modes
 - **SSH Package Auto-detection**: Automatically detects Dropbear or OpenSSH
 - **Clean Separation**: Build settings (.ini) and runtime config (.conf) are separate files
 - **No Script Modification**: EXE sends scripts as-is to SSH without any modification
@@ -94,15 +94,6 @@ EXE pipes the file as-is to SSH without any modification:
 type "adguardhome.sh" | ssh root@<IP> "sh -s"
 ```
 
-**Inline (directly in .conf):**
-```ini
-[command.setup]
-script =
-  #!/bin/sh
-  opkg update
-  opkg install luci-i18n-base-ja
-```
-
 EXE sends the script read from .conf directly to SSH stdin.
 
 #### url - Remote Script Execution
@@ -138,7 +129,7 @@ Build settings and runtime config are now separate files:
 | `*.ini` | Build settings (shortcuts, icons) | generate-wxs.ps1 |
 | `*.conf` | Runtime config (SSH, commands) | openwrt-connect.exe |
 
-EXE does not generate or modify scripts internally. It sends `.sh` files or inline scripts as-is.
+EXE does not generate or modify scripts internally. It sends `.sh` files scripts as-is.
 
 ### .ini (Build Settings)
 
@@ -200,7 +191,7 @@ C:\Program Files\OpenWrt Connect\
 
 ### About script execution
 
-- `script` field: Pipes `.sh` files or inline scripts directly to SSH stdin
+- `script` field: Pipes `.sh` files scripts directly to SSH stdin
 - `url` field: Downloaded and executed by the **OpenWrt device** via `wget`
 
 The EXE itself makes no external connections.
