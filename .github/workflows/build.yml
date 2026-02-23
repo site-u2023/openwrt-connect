@@ -1,8 +1,6 @@
 name: Build
-
 on:
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: windows-latest
@@ -10,11 +8,9 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-
       - name: Build
         shell: cmd
         run: openwrt-connect-build.bat
-
       - name: Upload to release
         run: gh release upload v2.0.0 openwrt-connect.msi --clobber
         env:
