@@ -15,8 +15,7 @@ openwrt-connect.exe              openwrt-connect.ini    openwrt-connect.conf
 │   dropbear/openssh  │  ←────  │ label, icon    │     │ [command.*]          │
 │   Auto-detection    │          └────────────────┘     │ script, url, cmd     │
 │ ■ .conf parsing     │                                 └──────────────────────┘
-│ ■ Multi-line script │  ←──────────────────────────────────────┘
-│ ■ Arg dispatch      │
+│ ■ Arg dispatch      │  ←──────────────────────────────────────┘
 └─────────────────────┘
 ```
 
@@ -59,21 +58,12 @@ openwrt-connect-build.bat
 
 | Field | Behavior | Example |
 |---|---|---|
-| `script` | Execute shell script | Inline multi-line or `./file.sh` |
+| `script` | Execute shell script | `./file.sh` |
 | `url` | wget remote script and execute | `url = https://example.com/script.sh` |
 | `cmd` | Execute single command directly | `cmd = opkg update` |
 | (none) | Interactive SSH session | |
 
 ### script Field Syntax
-
-**Inline (multi-line):**
-```ini
-[command.mysetup]
-script =
-  #!/bin/sh
-  echo "Hello"
-  opkg update
-```
 
 **External file reference (same directory as EXE):**
 ```ini
