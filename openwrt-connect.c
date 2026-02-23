@@ -5,7 +5,7 @@
  *   - IPv4 gateway auto-detection
  *   - SSH key authentication management
  *   - .conf file driven command execution
- *     - script: ./file.sh (pipe file) or inline (pipe via stdin)
+ *     - script: ./file.sh (pipe file to device)
  *     - url:    wget remote script and execute
  *     - cmd:    direct command execution
  *
@@ -70,7 +70,7 @@ static int find_conf_file(const char *exe_dir, char *conf_path, size_t size)
 /* ================================================== */
 typedef enum {
     CMD_TYPE_SSH,       /* No script/url/cmd = interactive SSH */
-    CMD_TYPE_SCRIPT,    /* script field (./file.sh or inline) */
+    CMD_TYPE_SCRIPT,    /* script field (./file.sh) */
     CMD_TYPE_URL,       /* url field (wget & execute) */
     CMD_TYPE_CMD        /* cmd field (direct command) */
 } CmdType;
@@ -80,7 +80,6 @@ typedef struct {
     char url[MAX_VALUE_LEN];
     char cmd[MAX_VALUE_LEN];
     char script[MAX_SCRIPT_LEN];
-    int script_is_file;  /* 1: ./file.sh参照, 0: インライン */
     CmdType type;
 } CommandDef;
 
@@ -286,7 +285,6 @@ int load_config(const char *exe_path, Config *cfg)
     char line[MAX_LINE_LEN];
     char current_section[128] = {0};
     char current_command[64] = {0};
-    int reading_script = 0;
     FILE *fp;
 
     strcpy(cfg->product_name, "OpenWrt Connect");
@@ -309,33 +307,6 @@ int load_config(const char *exe_path, Config *cfg)
     }
 
     while (fgets(line, sizeof(line), fp)) {
-        /* 複数行script読み込み中 */
-        if (reading_script && cfg->command_count > 0) {
-            char trimmed[MAX_LINE_LEN];
-            strncpy(trimmed, line, sizeof(trimmed) - 1);
-            trimmed[sizeof(trimmed) - 1] = '\0';
-            trim(trimmed);
-
-            /* 新しいセクションヘッダで終了 */
-            if (trimmed[0] == '[') {
-                reading_script = 0;
-                /* fallthrough: このlineを再処理 */
-            } else if (trimmed[0] == '\0' || trimmed[0] == '#') {
-                /* 空行・コメントはスキップ */
-                continue;
-            } else {
-                /* スクリプト行を追加 (先頭の2スペースインデントを除去) */
-                CommandDef *c = &cfg->commands[cfg->command_count - 1];
-                size_t cur_len = strlen(c->script);
-                char *content = line;
-                if (content[0] == ' ' && content[1] == ' ') content += 2;
-                if (cur_len + strlen(content) < MAX_SCRIPT_LEN - 1) {
-                    strcat(c->script, content);
-                }
-                continue;
-            }
-        }
-
         trim(line);
 
         if (line[0] == '\0' || line[0] == '#') continue;
@@ -356,7 +327,6 @@ int load_config(const char *exe_path, Config *cfg)
                         strncpy(c->name, cmd_name, sizeof(c->name) - 1);
                         strncpy(current_command, cmd_name, sizeof(current_command) - 1);
                         c->type = CMD_TYPE_SSH;
-                        c->script_is_file = 0;
                         cfg->command_count++;
                     }
                 } else {
@@ -394,20 +364,7 @@ int load_config(const char *exe_path, Config *cfg)
             CommandDef *c = &cfg->commands[cfg->command_count - 1];
             if (strcmp(key, "script") == 0) {
                 c->type = CMD_TYPE_SCRIPT;
-                if (val[0] == '.' && (val[1] == '/' || val[1] == '\\')) {
-                    /* ./file.sh 参照 */
-                    strncpy(c->script, val, sizeof(c->script) - 1);
-                    c->script_is_file = 1;
-                } else if (val[0] != '\0') {
-                    /* 1行インライン */
-                    strncpy(c->script, val, sizeof(c->script) - 1);
-                    c->script_is_file = 0;
-                } else {
-                    /* script = (空) → 複数行読み込み開始 */
-                    c->script[0] = '\0';
-                    c->script_is_file = 0;
-                    reading_script = 1;
-                }
+                strncpy(c->script, val, sizeof(c->script) - 1);
             }
             else if (strcmp(key, "url") == 0) {
                 strncpy(c->url, val, sizeof(c->url) - 1);
@@ -440,10 +397,9 @@ CommandDef* find_command(Config *cfg, const char *name)
 
 /*
  * script = ./file.sh の場合:
- *   type "C:\...\file.sh" | ssh ... "sh -s"
- *
- * script = (インライン) の場合:
- *   CreateProcess で ssh を起動し、stdin にスクリプトを直接書き込む
+ *   ファイルをパイプでSSHのstdinに送信し、デバイス上で実行
+ *   Step 1: type "file.sh" | ssh ... "sh -s" (インストール)
+ *   Step 2: ssh -tt ... <command> (対話実行)
  */
 static int exec_script_file(const CommandDef *target_cmd,
                             const char *sysroot, const char *key_path,
@@ -564,113 +520,6 @@ static int exec_script_file(const CommandDef *target_cmd,
     }
 
     return system(cmd);
-}
-
-static int exec_script_inline(const CommandDef *target_cmd,
-                              const char *sysroot, const char *key_path,
-                              const char *user, const char *ip)
-{
-    char ssh_cmdline[MAX_CMD_BUF];
-    SECURITY_ATTRIBUTES sa;
-    HANDLE hReadPipe, hWritePipe;
-    STARTUPINFOA si;
-    PROCESS_INFORMATION pi;
-    DWORD written, exit_code;
-    const char *p;
-
-    /* SSHコマンドライン構築 */
-    if (key_path) {
-        snprintf(ssh_cmdline, sizeof(ssh_cmdline),
-            "%s\\System32\\OpenSSH\\ssh.exe"
-            SSH_OPTS
-            " -i \"%s\" %s@%s \"sh -s\"",
-            sysroot, key_path, user, ip);
-    } else {
-        snprintf(ssh_cmdline, sizeof(ssh_cmdline),
-            "%s\\System32\\OpenSSH\\ssh.exe"
-            SSH_OPTS
-            " %s@%s \"sh -s\"",
-            sysroot, user, ip);
-    }
-
-    /* パイプ作成 */
-    sa.nLength = sizeof(sa);
-    sa.lpSecurityDescriptor = NULL;
-    sa.bInheritHandle = TRUE;
-
-    if (!CreatePipe(&hReadPipe, &hWritePipe, &sa, 0)) {
-        printf("[ERROR] Failed to create pipe.\n");
-        return 1;
-    }
-
-    /* 書き込み側は子プロセスに継承させない */
-    SetHandleInformation(hWritePipe, HANDLE_FLAG_INHERIT, 0);
-
-    /* SSHプロセス起動 (stdinをパイプに接続) */
-    ZeroMemory(&si, sizeof(si));
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdInput = hReadPipe;
-    si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
-    si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
-
-    ZeroMemory(&pi, sizeof(pi));
-
-    if (!CreateProcessA(NULL, ssh_cmdline, NULL, NULL, TRUE,
-                        0, NULL, NULL, &si, &pi)) {
-        printf("[ERROR] Failed to start SSH process.\n");
-        CloseHandle(hReadPipe);
-        CloseHandle(hWritePipe);
-        return 1;
-    }
-
-    /* 読み取り側を閉じる (子プロセスが使う) */
-    CloseHandle(hReadPipe);
-
-    /* confのscriptをそのままstdinに書き込む (\rは除去) */
-    for (p = target_cmd->script; *p; p++) {
-        if (*p == '\r') continue;
-        WriteFile(hWritePipe, p, 1, &written, NULL);
-    }
-
-    /* 末尾に改行がなければ追加 */
-    {
-        size_t slen = strlen(target_cmd->script);
-        if (slen > 0 && target_cmd->script[slen - 1] != '\n') {
-            WriteFile(hWritePipe, "\n", 1, &written, NULL);
-        }
-    }
-
-    /* パイプを閉じる → SSHのstdinがEOFになる */
-    CloseHandle(hWritePipe);
-
-    /* 終了待ち */
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    GetExitCodeProcess(pi.hProcess, &exit_code);
-
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-
-    if (exit_code != 0) return (int)exit_code;
-
-    /* Step 2: コマンドを対話的に実行 */
-    printf("Running %s...\n\n", target_cmd->name);
-    if (key_path) {
-        snprintf(ssh_cmdline, sizeof(ssh_cmdline),
-            "%s\\System32\\OpenSSH\\ssh.exe"
-            SSH_OPTS
-            " -i \"%s\""
-            " -tt %s@%s %s",
-            sysroot, key_path, user, ip, target_cmd->name);
-    } else {
-        snprintf(ssh_cmdline, sizeof(ssh_cmdline),
-            "%s\\System32\\OpenSSH\\ssh.exe"
-            SSH_OPTS
-            " -tt %s@%s %s",
-            sysroot, user, ip, target_cmd->name);
-    }
-
-    return system(ssh_cmdline);
 }
 
 /* ================================================== */
@@ -870,13 +719,8 @@ int main(int argc, char *argv[])
 
     switch (cmd_type) {
         case CMD_TYPE_SCRIPT:
-            if (target_cmd->script_is_file) {
-                ret = exec_script_file(target_cmd, sysroot, active_key,
-                                       cfg.ssh_user, ip, exe_dir);
-            } else {
-                ret = exec_script_inline(target_cmd, sysroot, active_key,
-                                         cfg.ssh_user, ip);
-            }
+            ret = exec_script_file(target_cmd, sysroot, active_key,
+                                   cfg.ssh_user, ip, exe_dir);
             break;
 
         case CMD_TYPE_URL:
