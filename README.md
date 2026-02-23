@@ -12,7 +12,7 @@
 
 - **ルーター自動検出**：ローカルネットワーク内のOpenWrtルーターを自動検出
 - **鍵認証自動設定**：SSH鍵ペアを自動で生成・設定
-- **柔軟なコマンド定義**：script（外部ファイル/インライン）、url、cmdの3方式に対応
+- **柔軟なコマンド定義**：script（外部ファイル）、url、cmdの3方式に対応
 - **SSHパッケージ自動判別**：DropbearとOpenSSHを自動で判別
 - **設定ファイル分離**：ビルド設定（.ini）と実行設定（.conf）を分離した明確な設計
 - **スクリプト無加工**：EXEはスクリプトを一切加工せず、そのままSSHに送信
@@ -94,15 +94,6 @@ EXEはファイルを一切加工せず、そのままSSHにパイプします�
 type "adguardhome.sh" | ssh root@<IP> "sh -s"
 ```
 
-**インライン（.conf内に直接記述）：**
-```ini
-[command.setup]
-script =
-  #!/bin/sh
-  opkg update
-  opkg install luci-i18n-base-ja
-```
-
 EXEはconfから読み込んだスクリプトをそのままSSHのstdinに送信します。
 
 #### url - リモートスクリプト実行
@@ -167,7 +158,7 @@ EXEはスクリプトを内部で生成・加工しません。`.sh`ファイル
 
 | フィールド | 説明 | 優先順位 |
 |---|---|---|
-| `script` | シェルスクリプト（`./file.sh` or インライン） | 1 |
+| `script` | シェルスクリプト（`./file.sh`） | 1 |
 | `url` | リモートスクリプトURL | 2 |
 | `cmd` | 単一コマンド | 3 |
 
@@ -200,7 +191,7 @@ C:\Program Files\OpenWrt Connect\
 
 ### スクリプト実行について
 
-- `script`フィールド：`.sh`ファイルまたはインラインスクリプトをそのままSSHのstdinにパイプして実行
+- `script`フィールド：`.sh`ファイルをそのままSSHのstdinにパイプして実行
 - `url`フィールド：**OpenWrtデバイス側**が`wget`でダウンロードして実行
 
 EXE自体は外部通信を行いません。
