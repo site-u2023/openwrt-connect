@@ -15,9 +15,9 @@ openwrt-connect.exe              openwrt-connect.ini    openwrt-connect.conf
 │   dropbear/openssh   │  ←────  │ label, icon    │     │ [command.*]          │
 │   自動対応           │          └────────────────┘     │ script, url, cmd     │
 │ ■ .conf読み込み      │                                 └──────────────────────┘
-│ ■ 複数行script対応   │  ←──────────────────────────────────────┘
 │ ■ 引数ディスパッチ   │
-└─────────────────────┘
+└─────────────────────┘  ←──────────────────────────────────────┘
+
 ```
 
 ## ビルドフロー
@@ -59,21 +59,12 @@ openwrt-connect-build.bat
 
 | フィールド | 動作 | 例 |
 |---|---|---|
-| `script` | シェルスクリプト実行 | インライン複数行 or `./file.sh` |
+| `script` | シェルスクリプト実行 | `./file.sh` |
 | `url` | リモートスクリプトをwgetして実行 | `url = https://example.com/script.sh` |
 | `cmd` | 単一コマンドを直接実行 | `cmd = opkg update` |
 | (なし) | インタラクティブSSHセッション | |
 
 ### script フィールドの書き方
-
-**インライン（複数行）:**
-```ini
-[command.mysetup]
-script =
-  #!/bin/sh
-  echo "Hello"
-  opkg update
-```
 
 **外部ファイル参照（EXEと同ディレクトリ）:**
 ```ini
