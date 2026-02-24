@@ -4,7 +4,7 @@
 
 ## 概要
 
-`Windows`か`OpenWrt`デバイスに簡単`SSH`接続し、カスタムスクリプトを実行できるツール。
+`Windows`が`OpenWrt`デバイスに簡単`SSH`接続し、カスタムスクリプトを実行できるツール。
 
 - **窓の杜紹介**：[OSに「OpenWrt」を使ったルーターへWindowsから接続「OpenWrt Connect」v1.0.0　ほか](https://forest.watch.impress.co.jp/docs/digest/2086650.html)
 
