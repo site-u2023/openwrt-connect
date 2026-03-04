@@ -404,7 +404,7 @@ CommandDef* find_command(Config *cfg, const char *name)
 static int exec_script_file(const CommandDef *target_cmd,
                             const char *sysroot, const char *key_path,
                             const char *user, const char *ip,
-                            const char *exe_dir)
+                            const char *exe_dir, const char *extra_args)
 {
     char filepath[MAX_VALUE_LEN];
     char ssh_cmdline[MAX_CMD_BUF];
@@ -503,20 +503,20 @@ static int exec_script_file(const CommandDef *target_cmd,
     if (exit_code != 0) return (int)exit_code;
 
     /* Step 2: コマンドを対話的に実行 */
-    printf("Running %s...\n\n", target_cmd->name);
+    printf("Running %s%s...\n\n", target_cmd->name, extra_args);
     if (key_path) {
         snprintf(cmd, sizeof(cmd),
             "%s\\System32\\OpenSSH\\ssh.exe"
             SSH_OPTS
             " -i \"%s\""
-            " -tt %s@%s %s",
-            sysroot, key_path, user, ip, target_cmd->name);
+            " -tt %s@%s %s%s",
+            sysroot, key_path, user, ip, target_cmd->name, extra_args);
     } else {
         snprintf(cmd, sizeof(cmd),
             "%s\\System32\\OpenSSH\\ssh.exe"
             SSH_OPTS
-            " -tt %s@%s %s",
-            sysroot, user, ip, target_cmd->name);
+            " -tt %s@%s %s%s",
+            sysroot, user, ip, target_cmd->name, extra_args);
     }
 
     return system(cmd);
@@ -527,7 +527,8 @@ static int exec_script_file(const CommandDef *target_cmd,
 /* ================================================== */
 static int exec_url(const CommandDef *target_cmd,
                     const char *sysroot, const char *key_path,
-                    const char *user, const char *ip)
+                    const char *user, const char *ip,
+                    const char *extra_args)
 {
     char remote_cmd[MAX_SCRIPT_LEN];
     char cmd[MAX_CMD_BUF];
@@ -537,12 +538,12 @@ static int exec_url(const CommandDef *target_cmd,
         "wget --no-check-certificate -O /tmp/%s.sh '%s' && "
         "chmod +x /tmp/%s.sh && "
         "sh /tmp/%s.sh"
-        " }; %s",
+        " }; %s%s",
         target_cmd->name,
         target_cmd->name, target_cmd->url,
         target_cmd->name,
         target_cmd->name,
-        target_cmd->name);
+        target_cmd->name, extra_args);
 
     if (key_path) {
         snprintf(cmd, sizeof(cmd),
@@ -569,7 +570,8 @@ static int exec_url(const CommandDef *target_cmd,
 /* ================================================== */
 static int exec_cmd(const CommandDef *target_cmd,
                     const char *sysroot, const char *key_path,
-                    const char *user, const char *ip)
+                    const char *user, const char *ip,
+                    const char *extra_args)
 {
     char cmd[MAX_CMD_BUF];
 
@@ -579,15 +581,15 @@ static int exec_cmd(const CommandDef *target_cmd,
             SSH_OPTS
             " -i \"%s\""
             " -tt %s@%s"
-            " \"%s\"",
-            sysroot, key_path, user, ip, target_cmd->cmd);
+            " \"%s%s\"",
+            sysroot, key_path, user, ip, target_cmd->cmd, extra_args);
     } else {
         snprintf(cmd, sizeof(cmd),
             "%s\\System32\\OpenSSH\\ssh.exe"
             SSH_OPTS
             " -tt %s@%s"
-            " \"%s\"",
-            sysroot, user, ip, target_cmd->cmd);
+            " \"%s%s\"",
+            sysroot, user, ip, target_cmd->cmd, extra_args);
     }
 
     return system(cmd);
@@ -710,27 +712,34 @@ int main(int argc, char *argv[])
 
     const char *active_key = use_key ? key_path : NULL;
 
+    /* argv[2]以降を追加引数として結合 */
+    char extra_args[MAX_VALUE_LEN] = {0};
+    for (int i = 2; i < argc; i++) {
+        strncat(extra_args, " ", sizeof(extra_args) - strlen(extra_args) - 1);
+        strncat(extra_args, argv[i], sizeof(extra_args) - strlen(extra_args) - 1);
+    }
+
     /* 実行 */
     printf("\nTarget: %s@%s\n", cfg.ssh_user, ip);
     if (!is_ssh_only) {
-        printf("Command: %s\n", target_cmd->name);
+        printf("Command: %s%s\n", target_cmd->name, extra_args);
     }
     printf("\nConnecting...\n\n");
 
     switch (cmd_type) {
         case CMD_TYPE_SCRIPT:
             ret = exec_script_file(target_cmd, sysroot, active_key,
-                                   cfg.ssh_user, ip, exe_dir);
+                                   cfg.ssh_user, ip, exe_dir, extra_args);
             break;
 
         case CMD_TYPE_URL:
             ret = exec_url(target_cmd, sysroot, active_key,
-                           cfg.ssh_user, ip);
+                           cfg.ssh_user, ip, extra_args);
             break;
 
         case CMD_TYPE_CMD:
             ret = exec_cmd(target_cmd, sysroot, active_key,
-                           cfg.ssh_user, ip);
+                           cfg.ssh_user, ip, extra_args);
             break;
 
         case CMD_TYPE_SSH:
