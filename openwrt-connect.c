@@ -1,5 +1,5 @@
 /*
- * openwrt-connect.exe - Remote Setup Tool v2.0.0
+ * openwrt-connect.exe - Remote Setup Tool v2.1.0
  *
  * Core features (built-in):
  *   - IPv4 gateway auto-detection
