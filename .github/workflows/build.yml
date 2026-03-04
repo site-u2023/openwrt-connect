@@ -12,6 +12,6 @@ jobs:
         shell: cmd
         run: openwrt-connect-build.bat
       - name: Upload to release
-        run: gh release upload v2.0.0 openwrt-connect.msi --clobber
+        run: gh release upload v2.1.0 openwrt-connect.msi --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
